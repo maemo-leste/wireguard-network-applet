@@ -1,0 +1,5 @@
+applet-wireguard (0.1) unstable; urgency=medium
+
+  * Initial packaging
+
+ -- Ivan J. <parazyd@dyne.org>  Mon, 05 Jul 2021 16:55:41 +0200

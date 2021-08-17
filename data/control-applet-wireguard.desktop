@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Wireguard
+Comment=Change Wireguard settings
+Type=HildonControlPanelPlugin
+Icon=statusarea_wireguard_enabled
+X-control-panel-plugin=control-applet-wireguard.so
+Categories=connectivity

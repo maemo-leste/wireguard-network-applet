@@ -1,0 +1,5 @@
+[Desktop Entry]
+Name=Wireguard
+Comment=Wireguard Status applet
+Type=default
+X-Path=status-applet-wireguard.so
