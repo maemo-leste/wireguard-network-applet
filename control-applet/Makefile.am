@@ -3,6 +3,7 @@ controllibdir = $(controlpanellibdir)
 
 control_applet_wireguard_la_SOURCES = \
 	control-applet.c \
+	pipeutil.c \
 	wizard.c
 
 control_applet_wireguard_la_CFLAGS = \

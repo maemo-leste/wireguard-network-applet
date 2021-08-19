@@ -30,8 +30,10 @@
 #define GC_CFG_PRIVATEKEY    "PrivateKey"
 #define GC_CFG_ADDRESS       "Address"
 #define GC_CFG_LISTENPORT    "ListenPort"
+#define GC_CFG_DNS           "DNS"
 
 #define GC_PEER_PUBLICKEY    "PublicKey"
+#define GC_PEER_PSK          "PresharedKey"
 #define GC_PEER_ALLOWEDIPS   "AllowedIPs"
 #define GC_PEER_ENDPOINT     "EndPoint"
 

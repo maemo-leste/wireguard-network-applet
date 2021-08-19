@@ -45,6 +45,13 @@ struct wizard_data {
 	gint local_page;
 	gint peers_page;
 
+	GtkWidget *private_key_entry;
+	GtkWidget *public_key_entry;
+	GtkWidget *address_entry;
+	GtkWidget *dns_address_entry;
+
+	GtkWidget *has_peers_chk;
+
 	struct wg_peer *peers[];
 };
 
