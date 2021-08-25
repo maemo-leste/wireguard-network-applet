@@ -179,14 +179,16 @@ static void on_assistant_apply(GtkWidget * widget, gpointer data)
 	gconf_set_string(w_data->gconf, gconf_dns, w_data->dns_address);
 	g_free(gconf_dns);
 
-	gconf_peers = g_strjoin("/", confname, GC_CFG_PEERS, NULL);
-	gconf_client_add_dir(w_data->gconf, gconf_peers,
-			     GCONF_CLIENT_PRELOAD_NONE, NULL);
-	g_free(gconf_peers);
+	if (w_data->peers->len > 0) {
+		gconf_peers = g_strjoin("/", confname, GC_CFG_PEERS, NULL);
+		gconf_client_add_dir(w_data->gconf, gconf_peers,
+				     GCONF_CLIENT_PRELOAD_NONE, NULL);
+		g_free(gconf_peers);
 
-	w_data->peer_idx = -1;
-	g_ptr_array_foreach(w_data->peers, save_peer, w_data);
-	g_ptr_array_foreach(w_data->peers, free_peer, NULL);
+		w_data->peer_idx = -1;
+		g_ptr_array_foreach(w_data->peers, save_peer, w_data);
+		g_ptr_array_foreach(w_data->peers, free_peer, NULL);
+	}
 	g_ptr_array_unref(w_data->peers);
 
 	g_free(confname);
