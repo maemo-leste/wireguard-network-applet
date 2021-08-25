@@ -35,6 +35,7 @@ struct wg_peer {
 
 struct wizard_data {
 	GtkWidget *assistant;
+	GConfClient *gconf;
 
 	const gchar *config_name;
 	GtkWidget *name_entry;
@@ -45,6 +46,9 @@ struct wizard_data {
 	gint local_page;
 	gint peers_page;
 
+	const gchar *private_key;
+	const gchar *address;
+	const gchar *dns_address;
 	GtkWidget *privkey_entry;
 	GtkWidget *pubkey_entry;
 	GtkWidget *addr_entry;

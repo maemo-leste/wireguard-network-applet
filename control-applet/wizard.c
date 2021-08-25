@@ -41,6 +41,7 @@ static void free_peer(gpointer elem, gpointer data)
 
 static void on_assistant_close_cancel(GtkWidget * widget, gpointer data)
 {
+	g_message("%s", G_STRFUNC);
 	(void)widget;
 	struct wizard_data *w_data = data;
 
@@ -72,8 +73,8 @@ static gint find_next_wizard_page(gint cur_page, gpointer data)
 	return -1;
 }
 
-/*
-static void gconf_set_string(GConfClient * gconf, gchar * key, gchar * string)
+static void gconf_set_string(GConfClient * gconf, const gchar * key,
+			     const gchar * string)
 {
 	GConfValue *v = gconf_value_new(GCONF_VALUE_STRING);
 	gconf_value_set_string(v, string);
@@ -81,17 +82,7 @@ static void gconf_set_string(GConfClient * gconf, gchar * key, gchar * string)
 	gconf_value_free(v);
 }
 
-static void gconf_set_int(GConfClient * gconf, gchar * key, gint x)
-{
-	GConfValue *v;
-
-	v = gconf_value_new(GCONF_VALUE_INT);
-	gconf_value_set_int(v, x);
-	gconf_client_set(gconf, key, v, NULL);
-	gconf_value_free(v);
-}
-
-static void gconf_set_bool(GConfClient * gconf, gchar * key, gboolean x)
+static void gconf_set_bool(GConfClient * gconf, const gchar * key, gboolean x)
 {
 	GConfValue *v;
 
@@ -100,13 +91,106 @@ static void gconf_set_bool(GConfClient * gconf, gchar * key, gboolean x)
 	gconf_client_set(gconf, key, v, NULL);
 	gconf_value_free(v);
 }
-*/
+
+static void save_peer(gpointer elem, gpointer data)
+{
+	struct wg_peer *peer = elem;
+	struct wizard_data *w_data = data;
+	gchar *peer_name, *gconf_path, *gconf_pubkey, *gconf_psk, *gconf_ips,
+	    *gconf_endpoint;
+
+	w_data->peer_idx++;
+	peer_name = g_strdup_printf("peer%d", w_data->peer_idx);
+
+	gconf_path =
+	    g_strjoin("/", GC_WIREGUARD, w_data->config_name, GC_CFG_PEERS,
+		      peer_name, NULL);
+
+	g_free(peer_name);
+
+	gconf_client_add_dir(w_data->gconf, gconf_path,
+			     GCONF_CLIENT_PRELOAD_NONE, NULL);
+
+	gconf_pubkey = g_strjoin("/", gconf_path, GC_PEER_PUBLICKEY, NULL);
+	gconf_set_string(w_data->gconf, gconf_pubkey, peer->public_key);
+	g_free(gconf_pubkey);
+
+	if (strlen(peer->preshared_key) == 44) {
+		gconf_psk = g_strjoin("/", gconf_path, GC_PEER_PSK, NULL);
+		gconf_set_string(w_data->gconf, gconf_psk, peer->preshared_key);
+		g_free(gconf_psk);
+	}
+
+	gconf_ips = g_strjoin("/", gconf_path, GC_PEER_ALLOWEDIPS, NULL);
+	gconf_set_string(w_data->gconf, gconf_ips, peer->allowed_ips);
+	g_free(gconf_ips);
+
+	gconf_endpoint = g_strjoin("/", gconf_path, GC_PEER_ENDPOINT, NULL);
+	gconf_set_string(w_data->gconf, gconf_endpoint, peer->endpoint);
+	g_free(gconf_endpoint);
+
+	g_free(gconf_path);
+}
 
 static void on_assistant_apply(GtkWidget * widget, gpointer data)
 {
 	(void)widget;
-	(void)data;
-	return;
+	struct wizard_data *w_data = data;
+	GtkAssistant *assistant = GTK_ASSISTANT(w_data->assistant);
+
+	if (gtk_assistant_get_current_page(assistant) == 0)
+		return;
+
+	w_data->gconf = gconf_client_get_default();
+	gchar *gconf_tpbool, *gconf_privkey, *gconf_addr, *gconf_dns,
+	    *gconf_peers;
+
+	w_data->config_name = gtk_entry_get_text(GTK_ENTRY(w_data->name_entry));
+	gchar *confname =
+	    g_strjoin("/", GC_WIREGUARD, w_data->config_name, NULL);
+
+	gconf_client_add_dir(w_data->gconf, confname, GCONF_CLIENT_PRELOAD_NONE,
+			     NULL);
+
+	g_object_get(G_OBJECT(w_data->transproxy_chk), "active",
+		     &w_data->transproxy_enabled, NULL);
+
+	gconf_tpbool = g_strjoin("/", confname, GC_CFG_TUNNELENABLED, NULL);
+	gconf_set_bool(w_data->gconf, gconf_tpbool, w_data->transproxy_enabled);
+	g_free(gconf_tpbool);
+
+	w_data->private_key =
+	    gtk_entry_get_text(GTK_ENTRY(w_data->privkey_entry));
+
+	gconf_privkey = g_strjoin("/", confname, GC_CFG_PRIVATEKEY, NULL);
+	gconf_set_string(w_data->gconf, gconf_privkey, w_data->private_key);
+	g_free(gconf_privkey);
+
+	w_data->address = gtk_entry_get_text(GTK_ENTRY(w_data->addr_entry));
+
+	gconf_addr = g_strjoin("/", confname, GC_CFG_ADDRESS, NULL);
+	gconf_set_string(w_data->gconf, gconf_addr, w_data->address);
+	g_free(gconf_addr);
+
+	w_data->dns_address =
+	    gtk_entry_get_text(GTK_ENTRY(w_data->dnsaddr_entry));
+
+	gconf_dns = g_strjoin("/", confname, GC_CFG_DNS, NULL);
+	gconf_set_string(w_data->gconf, gconf_dns, w_data->dns_address);
+	g_free(gconf_dns);
+
+	gconf_peers = g_strjoin("/", confname, GC_CFG_PEERS, NULL);
+	gconf_client_add_dir(w_data->gconf, gconf_peers,
+			     GCONF_CLIENT_PRELOAD_NONE, NULL);
+	g_free(gconf_peers);
+
+	w_data->peer_idx = -1;
+	g_ptr_array_foreach(w_data->peers, save_peer, w_data);
+	g_ptr_array_foreach(w_data->peers, free_peer, NULL);
+	g_ptr_array_unref(w_data->peers);
+
+	g_free(confname);
+	g_object_unref(w_data->gconf);
 }
 
 static void on_assistant_prepare(GtkWidget * assistant,

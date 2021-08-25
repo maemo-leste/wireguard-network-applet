@@ -32,6 +32,9 @@
 #define GC_CFG_LISTENPORT    "ListenPort"
 #define GC_CFG_DNS           "DNS"
 
+/* This is a directory inside a config */
+#define GC_CFG_PEERS         "peers"
+
 #define GC_PEER_PUBLICKEY    "PublicKey"
 #define GC_PEER_PSK          "PresharedKey"
 #define GC_PEER_ALLOWEDIPS   "AllowedIPs"
