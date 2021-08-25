@@ -37,7 +37,7 @@
 
 #define SETTINGS_RESPONSE -69
 
-#define GC_WIREGUARD         "/system/maemo/wireguard"
+#define GC_WIREGUARD         "/system/osso/connectivity/providers/wireguard"
 #define GC_WIREGUARD_ACTIVE  GC_WIREGUARD"/active_config"
 
 typedef struct _StatusAppletWireguard StatusAppletWireguard;
