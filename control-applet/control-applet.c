@@ -170,36 +170,38 @@ static void append_peer(gpointer elem, gpointer data)
 	gchar *gc_pubkey, *gc_psk, *gc_endpoint, *gc_ips;
 	gchar *pubkey, *psk, *endpoint, *ips;
 
+/*
 	gchar *path =
 	    g_strjoin("/", GC_WIREGUARD, w_data->config_name, GC_CFG_PEERS,
 		      peername, NULL);
+		      */
 
 	peer = g_new0(struct wg_peer, 1);
 
-	gc_pubkey = g_strjoin("/", path, GC_PEER_PUBLICKEY, NULL);
+	gc_pubkey = g_strjoin("/", peername, GC_PEER_PUBLICKEY, NULL);
 	pubkey = gconf_client_get_string(w_data->gconf, gc_pubkey, NULL);
 	g_free(gc_pubkey);
-	peer->publickey = g_strdup(pubkey);
+	peer->public_key = g_strdup(pubkey);
 
-	gc_psk = g_strjoin("/", path, GC_PEER_PSK, NULL);
+	gc_psk = g_strjoin("/", peername, GC_PEER_PSK, NULL);
 	psk = gconf_client_get_string(w_data->gconf, gc_psk, NULL);
-	g_free(gc_psk)
-	    if (psk != NULL)
+	g_free(gc_psk);
+	if (psk != NULL)
 		peer->preshared_key = g_strdup(psk);
 	else
 		peer->preshared_key = NULL;
 
-	gc_endpoint = g_strjoin("/", path, GC_PEER_ENDPOINT, NULL);
+	gc_endpoint = g_strjoin("/", peername, GC_PEER_ENDPOINT, NULL);
 	endpoint = gconf_client_get_string(w_data->gconf, gc_endpoint, NULL);
 	g_free(gc_endpoint);
 	peer->endpoint = g_strdup(endpoint);
 
-	gc_ips = g_strjoin("/", path, GC_PEER_ALLOWEDIPS, NULL);
+	gc_ips = g_strjoin("/", peername, GC_PEER_ALLOWEDIPS, NULL);
 	ips = gconf_client_get_string(w_data->gconf, gc_ips, NULL);
 	g_free(gc_ips);
 	peer->allowed_ips = g_strdup(ips);
 
-	g_free(path);
+	//g_free(path);
 
 	g_ptr_array_add(w_data->peers, peer);
 }
@@ -208,7 +210,7 @@ static struct wizard_data *fill_wizard_data_from_gconf(gchar * cfgname)
 {
 	struct wizard_data *w_data;
 	gchar *config_path;
-	gchar *g_transproxy, *g_privkey, *g_addr, *g_dns;
+	gchar *g_transproxy, *g_privkey, *g_addr, *g_dns, *g_peers;
 
 	if (cfgname == NULL)
 		return NULL;
@@ -245,9 +247,10 @@ static struct wizard_data *fill_wizard_data_from_gconf(gchar * cfgname)
 		GSList *peerlist =
 		    gconf_client_all_dirs(w_data->gconf, g_peers, NULL);
 		if (g_slist_length(peerlist) > 0) {
+			w_data->has_peers = TRUE;
 			w_data->peers = g_ptr_array_new();
 			g_slist_foreach(peerlist, append_peer, w_data);
-			g_slist_foreach(peerlist, g_free, NULL);
+			g_slist_foreach(peerlist, (GFunc) g_free, NULL);
 			g_slist_free(peerlist);
 		}
 	}

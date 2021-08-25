@@ -45,8 +45,10 @@ static void on_assistant_close_cancel(GtkWidget * widget, gpointer data)
 	(void)widget;
 	struct wizard_data *w_data = data;
 
-	g_ptr_array_foreach(w_data->peers, free_peer, NULL);
-	g_ptr_array_unref(w_data->peers);
+	if (w_data->peers != NULL) {
+		g_ptr_array_foreach(w_data->peers, free_peer, NULL);
+		g_ptr_array_unref(w_data->peers);
+	}
 
 	GtkWidget **assistant = (GtkWidget **) data;
 	gtk_widget_destroy(*assistant);
@@ -352,6 +354,10 @@ static gint new_wizard_local_page(struct wizard_data *w_data)
 	privkey_lbl = gtk_label_new("Private key:");
 	w_data->privkey_entry = gtk_entry_new();
 
+	if (w_data->private_key)
+		gtk_entry_set_text(GTK_ENTRY(w_data->privkey_entry),
+				   w_data->private_key);
+
 	btn_generate = gtk_button_new_with_label("Generate");
 
 	gtk_box_pack_start(GTK_BOX(hb0), privkey_lbl, FALSE, FALSE, 0);
@@ -380,6 +386,11 @@ static gint new_wizard_local_page(struct wizard_data *w_data)
 	GtkWidget *hb2 = gtk_hbox_new(FALSE, 2);
 	addr_lbl = gtk_label_new("Address:");
 	w_data->addr_entry = gtk_entry_new();
+
+	if (w_data->address)
+		gtk_entry_set_text(GTK_ENTRY(w_data->addr_entry),
+				   w_data->address);
+
 	gtk_box_pack_start(GTK_BOX(hb2), addr_lbl, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(hb2), w_data->addr_entry, TRUE, TRUE, 0);
 	gtk_box_pack_start(GTK_BOX(vbox), hb2, TRUE, TRUE, 0);
@@ -391,6 +402,11 @@ static gint new_wizard_local_page(struct wizard_data *w_data)
 	GtkWidget *hb3 = gtk_hbox_new(FALSE, 2);
 	dnsaddr_lbl = gtk_label_new("DNS Address:");
 	w_data->dnsaddr_entry = gtk_entry_new();
+
+	if (w_data->dns_address)
+		gtk_entry_set_text(GTK_ENTRY(w_data->dnsaddr_entry),
+				   w_data->dns_address);
+
 	gtk_box_pack_start(GTK_BOX(hb3), dnsaddr_lbl, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(hb3), w_data->dnsaddr_entry, TRUE, TRUE, 0);
 	gtk_box_pack_start(GTK_BOX(vbox), hb3, TRUE, TRUE, 0);
@@ -403,6 +419,12 @@ static gint new_wizard_local_page(struct wizard_data *w_data)
 	rv = gtk_assistant_append_page(GTK_ASSISTANT(w_data->assistant), vbox);
 	gtk_assistant_set_page_title(GTK_ASSISTANT(w_data->assistant), vbox,
 				     "Interface configuration");
+
+	if (w_data->private_key) {
+		validate_privkey_cb(NULL, w_data);
+		validate_interface_cb(NULL, w_data);
+	}
+
 	return rv;
 }
 
@@ -433,6 +455,7 @@ static void prev_peer_cb(GtkWidget * widget, gpointer data)
 
 static void next_peer_cb(GtkWidget * widget, gpointer data)
 {
+	/* TODO: There is some bug in these prev/next functions */
 	struct wizard_data *w_data = data;
 	struct wg_peer *peer;
 
@@ -624,7 +647,10 @@ static gint new_wizard_peer_page(struct wizard_data *w_data)
 	gint rv;
 	GtkWidget *vbox;
 	GtkWidget *pubkey_lbl, *psk_lbl, *endpoint_lbl, *ips_lbl;
-	//struct wg_peer *peer = g_new0(struct wg_peer, 1);
+	struct wg_peer *peer = NULL;
+
+	if (w_data->peers->len > 0)
+		peer = w_data->peers->pdata[0];
 
 	vbox = gtk_vbox_new(TRUE, 2);
 
@@ -635,6 +661,10 @@ static gint new_wizard_peer_page(struct wizard_data *w_data)
 	pubkey_lbl = gtk_label_new("Public key:");
 	w_data->p_pubkey_entry = gtk_entry_new();
 
+	if (peer)
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_pubkey_entry),
+				   peer->public_key);
+
 	gtk_box_pack_start(GTK_BOX(hb0), pubkey_lbl, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(hb0), w_data->p_pubkey_entry, TRUE, TRUE, 0);
 	gtk_box_pack_start(GTK_BOX(vbox), hb0, TRUE, TRUE, 0);
@@ -643,7 +673,13 @@ static gint new_wizard_peer_page(struct wizard_data *w_data)
 	GtkWidget *hb1 = gtk_hbox_new(FALSE, 2);
 	psk_lbl = gtk_label_new("Preshared key:");
 	w_data->p_psk_entry = gtk_entry_new();
-	gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry), "(optional)");
+
+	if (peer && peer->preshared_key != NULL)
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry),
+				   peer->preshared_key);
+	else
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry),
+				   "(optional)");
 
 	gtk_box_pack_start(GTK_BOX(hb1), psk_lbl, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(hb1), w_data->p_psk_entry, TRUE, TRUE, 0);
@@ -654,6 +690,10 @@ static gint new_wizard_peer_page(struct wizard_data *w_data)
 	endpoint_lbl = gtk_label_new("Endpoint:");
 	w_data->p_endpoint_entry = gtk_entry_new();
 
+	if (peer)
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_endpoint_entry),
+				   peer->endpoint);
+
 	gtk_box_pack_start(GTK_BOX(hb2), endpoint_lbl, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(hb2), w_data->p_endpoint_entry, TRUE, TRUE,
 			   0);
@@ -663,6 +703,10 @@ static gint new_wizard_peer_page(struct wizard_data *w_data)
 	GtkWidget *hb3 = gtk_hbox_new(FALSE, 2);
 	ips_lbl = gtk_label_new("Allowed IPs:");
 	w_data->p_ips_entry = gtk_entry_new();
+
+	if (peer)
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_ips_entry),
+				   peer->allowed_ips);
 
 	gtk_box_pack_start(GTK_BOX(hb3), ips_lbl, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(hb3), w_data->p_ips_entry, TRUE, TRUE, 0);
@@ -706,6 +750,11 @@ static gint new_wizard_peer_page(struct wizard_data *w_data)
 	rv = gtk_assistant_append_page(GTK_ASSISTANT(w_data->assistant), vbox);
 	gtk_assistant_set_page_title(GTK_ASSISTANT(w_data->assistant), vbox,
 				     "Peer configuration");
+
+	if (peer)
+		gtk_assistant_set_page_complete(GTK_ASSISTANT
+						(w_data->assistant), vbox,
+						TRUE);
 
 	return rv;
 }
