@@ -54,11 +54,17 @@ struct wizard_data {
 	gboolean has_peers;
 
 	GPtrArray *peers;
+	gint peer_idx;
 
 	GtkWidget *p_pubkey_entry;
 	GtkWidget *p_psk_entry;
 	GtkWidget *p_endpoint_entry;
 	GtkWidget *p_ips_entry;
+
+	GtkWidget *p_save_btn;
+	GtkWidget *p_del_btn;
+	GtkWidget *p_prev_btn;
+	GtkWidget *p_next_btn;
 };
 
 void start_new_wizard(gpointer config_data);

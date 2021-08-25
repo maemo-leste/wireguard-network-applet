@@ -29,9 +29,26 @@
 #include "pipeutil.h"
 #include "wizard.h"
 
+static void free_peer(gpointer elem, gpointer data)
+{
+	(void)data;
+	struct wg_peer *peer = elem;
+
+	g_message("%s", peer->public_key);
+
+	g_free(peer->public_key);
+	g_free(peer->preshared_key);
+	g_free(peer->endpoint);
+	g_free(peer->allowed_ips);
+}
+
 static void on_assistant_close_cancel(GtkWidget * widget, gpointer data)
 {
 	(void)widget;
+	struct wizard_data *w_data = data;
+
+	g_ptr_array_foreach(w_data->peers, free_peer, NULL);
+	g_ptr_array_unref(w_data->peers);
 
 	GtkWidget **assistant = (GtkWidget **) data;
 	gtk_widget_destroy(*assistant);
@@ -299,12 +316,6 @@ static gint new_wizard_local_page(struct wizard_data *w_data)
 	g_signal_connect(G_OBJECT(w_data->dnsaddr_entry), "changed",
 			 G_CALLBACK(validate_interface_cb), w_data);
 
-	/* Peers checkbox (should we add peer(s) or not) */
-	GtkWidget *hb4 = gtk_hbox_new(FALSE, 2);
-	w_data->peers_chk = gtk_check_button_new_with_label("Add peers");
-	gtk_box_pack_start(GTK_BOX(hb4), w_data->peers_chk, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(vbox), hb4, TRUE, TRUE, 0);
-
 	gtk_widget_show_all(vbox);
 
 	rv = gtk_assistant_append_page(GTK_ASSISTANT(w_data->assistant), vbox);
@@ -313,12 +324,161 @@ static gint new_wizard_local_page(struct wizard_data *w_data)
 	return rv;
 }
 
+static void validate_peer_cb(GtkWidget * widget, gpointer data)
+{
+	(void)widget;
+	struct wizard_data *w_data = data;
+	struct wg_peer *peer;
+	const gchar *pubkey, *psk, *fendpoint, *fips;
+	gchar **endpoint, **ips;
+	gint64 port, subnet;
+	GtkAssistant *assistant = GTK_ASSISTANT(w_data->assistant);
+	gint page_number;
+	GtkWidget *cur_page;
+
+	page_number = gtk_assistant_get_current_page(assistant);
+	cur_page = gtk_assistant_get_nth_page(assistant, page_number);
+
+	pubkey = gtk_entry_get_text(GTK_ENTRY(w_data->p_pubkey_entry));
+	psk = gtk_entry_get_text(GTK_ENTRY(w_data->p_psk_entry));
+	fendpoint = gtk_entry_get_text(GTK_ENTRY(w_data->p_endpoint_entry));
+	fips = gtk_entry_get_text(GTK_ENTRY(w_data->p_ips_entry));
+
+	/* TODO: Better validation */
+	if (strlen(pubkey) != 44) {
+		hildon_banner_show_information(NULL, NULL, "Invalid pubkey");
+		goto invalid;
+	}
+
+	if (strlen(psk) != 44 && g_strcmp0("(optional)", psk)
+	    && g_strcmp0("", psk)) {
+		hildon_banner_show_information(NULL, NULL, "Invalid PSK");
+		goto invalid;
+	}
+
+	endpoint = g_strsplit(fendpoint, ":", 2);
+	if (g_strv_length(endpoint) != 2) {
+		hildon_banner_show_information(NULL, NULL, "Invalid Endpoint");
+		g_strfreev(endpoint);
+		goto invalid;
+	}
+
+	/* TODO: Maybe support domains? */
+	if (!g_hostname_is_ip_address(endpoint[0])) {
+		hildon_banner_show_information(NULL, NULL,
+					       "Endpoint is not a valid IPv4");
+		g_strfreev(endpoint);
+		goto invalid;
+	}
+
+	port = g_ascii_strtoll(endpoint[1], NULL, 10);
+	if (port < 1 || port > 65535) {
+		hildon_banner_show_information(NULL, NULL,
+					       "Endpoint has an invalid port number");
+		g_strfreev(endpoint);
+		goto invalid;
+	}
+
+	/* TODO: Support multiple, i.e.: 0.0.0.0/0, ::/0 */
+	ips = g_strsplit(fips, "/", 2);
+	if (g_strv_length(ips) != 2) {
+		hildon_banner_show_information(NULL, NULL,
+					       "Allowed IP is invalid");
+		g_strfreev(ips);
+		goto invalid;
+	}
+
+	if (!g_hostname_is_ip_address(ips[0])) {
+		hildon_banner_show_information(NULL, NULL,
+					       "Allowed IP is invalid");
+		g_strfreev(ips);
+		goto invalid;
+	}
+
+	subnet = g_ascii_strtoll(ips[1], NULL, 10);
+
+	if (subnet != 0) {
+		if (subnet < 16 || subnet > 30) {
+			hildon_banner_show_information(NULL, NULL,
+						       "Allowed IP has invalid subnet");
+			g_strfreev(ips);
+			goto invalid;
+		}
+	}
+
+	/* At this point, we consider the entries valid */
+	peer = g_new0(struct wg_peer, 1);
+	peer->public_key = g_strdup(pubkey);
+	peer->preshared_key = g_strdup(psk);
+	peer->endpoint = g_strdup(fendpoint);
+	peer->allowed_ips = g_strdup(fips);
+
+	g_ptr_array_add(w_data->peers, peer);
+
+	gtk_assistant_set_page_complete(assistant, cur_page, TRUE);
+
+	hildon_banner_show_information(NULL, NULL, "Saved");
+
+	gtk_widget_set_sensitive(w_data->p_next_btn, TRUE);
+	return;
+
+ invalid:
+	gtk_assistant_set_page_complete(assistant, cur_page, FALSE);
+}
+
+static void prev_peer_cb(GtkWidget * widget, gpointer data)
+{
+	struct wizard_data *w_data = data;
+	struct wg_peer *peer;
+
+	w_data->peer_idx--;
+
+	if (w_data->peer_idx < 0) {
+		w_data->peer_idx = 0;
+		gtk_widget_set_sensitive(widget, FALSE);
+	}
+
+	peer = w_data->peers->pdata[w_data->peer_idx];
+
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_pubkey_entry), peer->public_key);
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry), peer->preshared_key);
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_endpoint_entry), peer->endpoint);
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_ips_entry), peer->allowed_ips);
+}
+
+static void next_peer_cb(GtkWidget * widget, gpointer data)
+{
+	struct wizard_data *w_data = data;
+	struct wg_peer *peer;
+
+	w_data->peer_idx++;
+
+	if (w_data->peer_idx >= w_data->peers->len) {
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_pubkey_entry), "");
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry), "");
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_endpoint_entry), "");
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_ips_entry), "");
+
+		gtk_widget_set_sensitive(widget, FALSE);
+		gtk_widget_set_sensitive(w_data->p_prev_btn, TRUE);
+		return;
+	}
+
+	peer = w_data->peers->pdata[w_data->peer_idx];
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_pubkey_entry), peer->public_key);
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry), peer->preshared_key);
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_endpoint_entry), peer->endpoint);
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_ips_entry), peer->allowed_ips);
+
+	if (w_data->peer_idx == w_data->peers->len - 1)
+		gtk_widget_set_sensitive(widget, FALSE);
+}
+
 static gint new_wizard_peer_page(struct wizard_data *w_data)
 {
 	gint rv;
 	GtkWidget *vbox;
 	GtkWidget *pubkey_lbl, *psk_lbl, *endpoint_lbl, *ips_lbl;
-	GtkWidget *save_btn, *del_btn, *prev_btn, *next_btn;
 	//struct wg_peer *peer = g_new0(struct wg_peer, 1);
 
 	vbox = gtk_vbox_new(TRUE, 2);
@@ -365,15 +525,29 @@ static gint new_wizard_peer_page(struct wizard_data *w_data)
 
 	/* Save/Delete/Previous/Next */
 	GtkWidget *hb4 = gtk_hbox_new(FALSE, 2);
-	save_btn = gtk_button_new_with_label("Save peer");
-	del_btn = gtk_button_new_with_label("Delete peer");
-	prev_btn = gtk_button_new_with_label("Previous");
-	next_btn = gtk_button_new_with_label("Next");
+	w_data->p_save_btn = gtk_button_new_with_label("Save peer");
+	w_data->p_del_btn = gtk_button_new_with_label("Delete peer");
 
-	gtk_box_pack_start(GTK_BOX(hb4), save_btn, TRUE, TRUE, 2);
-	gtk_box_pack_start(GTK_BOX(hb4), del_btn, TRUE, TRUE, 2);
-	gtk_box_pack_start(GTK_BOX(hb4), prev_btn, TRUE, TRUE, 2);
-	gtk_box_pack_start(GTK_BOX(hb4), next_btn, TRUE, TRUE, 2);
+	w_data->p_prev_btn = gtk_button_new_with_label("Previous");
+	gtk_widget_set_sensitive(w_data->p_prev_btn, FALSE);
+
+	w_data->p_next_btn = gtk_button_new_with_label("Next");
+	if (w_data->peers->len < 2)
+		gtk_widget_set_sensitive(w_data->p_next_btn, FALSE);
+
+	g_signal_connect(G_OBJECT(w_data->p_save_btn), "clicked",
+			 G_CALLBACK(validate_peer_cb), w_data);
+
+	g_signal_connect(G_OBJECT(w_data->p_prev_btn), "clicked",
+			 G_CALLBACK(prev_peer_cb), w_data);
+
+	g_signal_connect(G_OBJECT(w_data->p_next_btn), "clicked",
+			 G_CALLBACK(next_peer_cb), w_data);
+
+	gtk_box_pack_start(GTK_BOX(hb4), w_data->p_save_btn, TRUE, TRUE, 2);
+	gtk_box_pack_start(GTK_BOX(hb4), w_data->p_del_btn, TRUE, TRUE, 2);
+	gtk_box_pack_start(GTK_BOX(hb4), w_data->p_prev_btn, TRUE, TRUE, 2);
+	gtk_box_pack_start(GTK_BOX(hb4), w_data->p_next_btn, TRUE, TRUE, 2);
 	gtk_box_pack_start(GTK_BOX(vbox), hb4, TRUE, TRUE, 0);
 
 	gtk_widget_show_all(vbox);
@@ -476,6 +650,7 @@ static void new_wizard_main_page(struct wizard_data *w_data)
 	gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(vbox), w_data->transproxy_chk, FALSE, FALSE,
 			   0);
+	gtk_box_pack_start(GTK_BOX(vbox), w_data->peers_chk, FALSE, FALSE, 0);
 
 	gtk_widget_show_all(vbox);
 
@@ -484,9 +659,6 @@ static void new_wizard_main_page(struct wizard_data *w_data)
 	gtk_assistant_set_page_title(GTK_ASSISTANT
 				     (w_data->assistant), vbox,
 				     "Wireguard Configuration Wizard");
-
-	gtk_assistant_set_page_type(GTK_ASSISTANT(w_data->assistant),
-				    vbox, GTK_ASSISTANT_PAGE_CONFIRM);
 
 	if (w_data->config_name)
 		on_conf_name_entry_changed(w_data->name_entry, w_data);
@@ -501,8 +673,11 @@ void start_new_wizard(gpointer config_data)
 
 	if (config_data == NULL) {
 		w_data = g_new0(struct wizard_data, 1);
+		w_data->peers = g_ptr_array_new();
+		w_data->peer_idx = 0;
 	} else {
 		w_data = config_data;
+		w_data->peer_idx = 0;
 	}
 
 	w_data->assistant = gtk_assistant_new();
@@ -532,16 +707,10 @@ void start_new_wizard(gpointer config_data)
 	g_signal_connect(G_OBJECT(w_data->assistant),
 			 "apply", G_CALLBACK(on_assistant_apply), w_data);
 
-	GtkWidget *page =
-	    gtk_assistant_get_nth_page(GTK_ASSISTANT(w_data->assistant), 0);
-
-	gtk_assistant_set_page_type(GTK_ASSISTANT
-				    (w_data->assistant),
-				    page, GTK_ASSISTANT_PAGE_INTRO);
-
 	w_data->local_page = new_wizard_local_page(w_data);
 
 	gtk_widget_show_all(w_data->assistant);
+
 	gtk_main();
 	g_free(w_data);
 }
