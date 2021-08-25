@@ -33,9 +33,6 @@ static void free_peer(gpointer elem, gpointer data)
 {
 	(void)data;
 	struct wg_peer *peer = elem;
-
-	g_message("%s", peer->public_key);
-
 	g_free(peer->public_key);
 	g_free(peer->preshared_key);
 	g_free(peer->endpoint);
@@ -197,7 +194,6 @@ static void validate_interface_cb(GtkWidget * widget, gpointer data)
 	}
 
 	subnet = g_ascii_strtoll(addr_toks[1], NULL, 10);
-	g_message("%ld", subnet);
 
 	if (subnet < 16 || subnet > 30) {
 		g_warning("Subnet is invalid");
@@ -324,6 +320,76 @@ static gint new_wizard_local_page(struct wizard_data *w_data)
 	return rv;
 }
 
+static void prev_peer_cb(GtkWidget * widget, gpointer data)
+{
+	struct wizard_data *w_data = data;
+	struct wg_peer *peer;
+
+	w_data->peer_idx--;
+
+	if (w_data->peer_idx <= 0) {
+		w_data->peer_idx = 0;
+		gtk_widget_set_sensitive(widget, FALSE);
+	}
+
+	if (w_data->peers->len > 0)
+		gtk_widget_set_sensitive(w_data->p_next_btn, TRUE);
+
+	peer = w_data->peers->pdata[w_data->peer_idx];
+
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_pubkey_entry), peer->public_key);
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry), peer->preshared_key);
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_endpoint_entry), peer->endpoint);
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_ips_entry), peer->allowed_ips);
+
+	gtk_widget_set_sensitive(w_data->p_del_btn, TRUE);
+}
+
+static void next_peer_cb(GtkWidget * widget, gpointer data)
+{
+	struct wizard_data *w_data = data;
+	struct wg_peer *peer;
+
+	w_data->peer_idx++;
+
+	if (w_data->peer_idx >= w_data->peers->len || w_data->peers->len == 0) {
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_pubkey_entry), "");
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry), "");
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_endpoint_entry), "");
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_ips_entry), "");
+
+		gtk_widget_set_sensitive(widget, FALSE);
+		gtk_widget_set_sensitive(w_data->p_del_btn, FALSE);
+		gtk_widget_set_sensitive(w_data->p_prev_btn,
+					 w_data->peer_idx > 0 ? TRUE : FALSE);
+		return;
+	}
+
+	peer = w_data->peers->pdata[w_data->peer_idx];
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_pubkey_entry), peer->public_key);
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry), peer->preshared_key);
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_endpoint_entry), peer->endpoint);
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_ips_entry), peer->allowed_ips);
+
+	if (w_data->peer_idx == w_data->peers->len - 1)
+		gtk_widget_set_sensitive(widget, FALSE);
+
+	gtk_widget_set_sensitive(w_data->p_del_btn, TRUE);
+}
+
+static void del_peer_cb(GtkWidget * widget, gpointer data)
+{
+	struct wizard_data *w_data = data;
+	struct wg_peer *peer;
+
+	if (w_data->peers->pdata[w_data->peer_idx] != NULL) {
+		peer = g_ptr_array_steal_index(w_data->peers, w_data->peer_idx);
+		free_peer(peer, NULL);
+		w_data->peer_idx--;
+		next_peer_cb(w_data->p_next_btn, w_data);
+	}
+}
+
 static void validate_peer_cb(GtkWidget * widget, gpointer data)
 {
 	(void)widget;
@@ -344,14 +410,47 @@ static void validate_peer_cb(GtkWidget * widget, gpointer data)
 	fendpoint = gtk_entry_get_text(GTK_ENTRY(w_data->p_endpoint_entry));
 	fips = gtk_entry_get_text(GTK_ENTRY(w_data->p_ips_entry));
 
+	if (w_data->peers->len > 0) {
+		if (w_data->peers->pdata[w_data->peer_idx] != NULL) {
+			gboolean same = TRUE;
+			struct wg_peer *p =
+			    w_data->peers->pdata[w_data->peer_idx];
+
+			if (g_strcmp0(p->public_key, pubkey))
+				same = FALSE;
+
+			if (g_strcmp0(p->preshared_key, psk))
+				same = FALSE;
+
+			if (g_strcmp0(p->endpoint, fendpoint))
+				same = FALSE;
+
+			if (g_strcmp0(p->allowed_ips, fips))
+				same = FALSE;
+
+			gtk_assistant_set_page_complete(assistant, cur_page,
+							same);
+
+			if (same)
+				return;
+		}
+	}
+
+	if (!g_strcmp0(pubkey, "")
+	    && (!g_strcmp0(psk, "(optional)") || !g_strcmp0(psk, ""))
+	    && !g_strcmp0(fendpoint, "") && !g_strcmp0(fips, "")) {
+		gtk_assistant_set_page_complete(assistant, cur_page, TRUE);
+		return;
+	}
+
 	/* TODO: Better validation */
 	if (strlen(pubkey) != 44) {
 		hildon_banner_show_information(NULL, NULL, "Invalid pubkey");
 		goto invalid;
 	}
 
-	if (strlen(psk) != 44 && g_strcmp0("(optional)", psk)
-	    && g_strcmp0("", psk)) {
+	if (strlen(psk) != 44
+	    && (g_strcmp0(psk, "(optional)") && g_strcmp0("", psk))) {
 		hildon_banner_show_information(NULL, NULL, "Invalid PSK");
 		goto invalid;
 	}
@@ -407,6 +506,7 @@ static void validate_peer_cb(GtkWidget * widget, gpointer data)
 	}
 
 	/* At this point, we consider the entries valid */
+	peer = NULL;
 	peer = g_new0(struct wg_peer, 1);
 	peer->public_key = g_strdup(pubkey);
 	peer->preshared_key = g_strdup(psk);
@@ -419,59 +519,11 @@ static void validate_peer_cb(GtkWidget * widget, gpointer data)
 
 	hildon_banner_show_information(NULL, NULL, "Saved");
 
-	gtk_widget_set_sensitive(w_data->p_next_btn, TRUE);
+	next_peer_cb(w_data->p_next_btn, w_data);
 	return;
 
  invalid:
 	gtk_assistant_set_page_complete(assistant, cur_page, FALSE);
-}
-
-static void prev_peer_cb(GtkWidget * widget, gpointer data)
-{
-	struct wizard_data *w_data = data;
-	struct wg_peer *peer;
-
-	w_data->peer_idx--;
-
-	if (w_data->peer_idx < 0) {
-		w_data->peer_idx = 0;
-		gtk_widget_set_sensitive(widget, FALSE);
-	}
-
-	peer = w_data->peers->pdata[w_data->peer_idx];
-
-	gtk_entry_set_text(GTK_ENTRY(w_data->p_pubkey_entry), peer->public_key);
-	gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry), peer->preshared_key);
-	gtk_entry_set_text(GTK_ENTRY(w_data->p_endpoint_entry), peer->endpoint);
-	gtk_entry_set_text(GTK_ENTRY(w_data->p_ips_entry), peer->allowed_ips);
-}
-
-static void next_peer_cb(GtkWidget * widget, gpointer data)
-{
-	struct wizard_data *w_data = data;
-	struct wg_peer *peer;
-
-	w_data->peer_idx++;
-
-	if (w_data->peer_idx >= w_data->peers->len) {
-		gtk_entry_set_text(GTK_ENTRY(w_data->p_pubkey_entry), "");
-		gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry), "");
-		gtk_entry_set_text(GTK_ENTRY(w_data->p_endpoint_entry), "");
-		gtk_entry_set_text(GTK_ENTRY(w_data->p_ips_entry), "");
-
-		gtk_widget_set_sensitive(widget, FALSE);
-		gtk_widget_set_sensitive(w_data->p_prev_btn, TRUE);
-		return;
-	}
-
-	peer = w_data->peers->pdata[w_data->peer_idx];
-	gtk_entry_set_text(GTK_ENTRY(w_data->p_pubkey_entry), peer->public_key);
-	gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry), peer->preshared_key);
-	gtk_entry_set_text(GTK_ENTRY(w_data->p_endpoint_entry), peer->endpoint);
-	gtk_entry_set_text(GTK_ENTRY(w_data->p_ips_entry), peer->allowed_ips);
-
-	if (w_data->peer_idx == w_data->peers->len - 1)
-		gtk_widget_set_sensitive(widget, FALSE);
 }
 
 static gint new_wizard_peer_page(struct wizard_data *w_data)
@@ -535,8 +587,14 @@ static gint new_wizard_peer_page(struct wizard_data *w_data)
 	if (w_data->peers->len < 2)
 		gtk_widget_set_sensitive(w_data->p_next_btn, FALSE);
 
+	if (w_data->peers->len == 0)
+		gtk_widget_set_sensitive(w_data->p_del_btn, FALSE);
+
 	g_signal_connect(G_OBJECT(w_data->p_save_btn), "clicked",
 			 G_CALLBACK(validate_peer_cb), w_data);
+
+	g_signal_connect(G_OBJECT(w_data->p_del_btn), "clicked",
+			 G_CALLBACK(del_peer_cb), w_data);
 
 	g_signal_connect(G_OBJECT(w_data->p_prev_btn), "clicked",
 			 G_CALLBACK(prev_peer_cb), w_data);
