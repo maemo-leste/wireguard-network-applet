@@ -3,8 +3,8 @@
   <schemalist>
 
     <schema>
-      <key>/schemas/system/maemo/wireguard/active_config</key>
-      <applyto>/system/maemo/wireguard/active_config</applyto>
+      <key>/schemas/system/osso/connectivity/providers/wireguard/active_config</key>
+      <applyto>/system/osso/connectivity/providers/wireguard/active_config</applyto>
       <owner>applet-wireguard</owner>
       <type>string</type>
       <default>Default</default>
@@ -15,8 +15,8 @@
     </schema>
 
     <schema>
-      <key>/schemas/system/maemo/wireguard/Default/systemtunnel-enabled</key>
-      <applyto>/system/maemo/wireguard/Default/systemtunnel-enabled</applyto>
+      <key>/schemas/system/osso/connectivity/providers/wireguard/Default/systemtunnel-enabled</key>
+      <applyto>/system/osso/connectivity/providers/wireguard/Default/systemtunnel-enabled</applyto>
       <owner>applet-wireguard</owner>
       <type>bool</type>
       <default>true</default>
@@ -27,8 +27,8 @@
     </schema>
 
     <schema>
-      <key>/schemas/system/maemo/wireguard/Default/PrivateKey</key>
-      <applyto>/system/maemo/wireguard/Default/PrivateKey</applyto>
+      <key>/schemas/system/osso/connectivity/providers/wireguard/Default/PrivateKey</key>
+      <applyto>/system/osso/connectivity/providers/wireguard/Default/PrivateKey</applyto>
       <owner>applet-wireguard</owner>
       <type>string</type>
       <default></default>
@@ -39,8 +39,8 @@
     </schema>
 
     <schema>
-      <key>/schemas/system/maemo/wireguard/Default/Address</key>
-      <applyto>/system/maemo/wireguard/Default/Address</applyto>
+      <key>/schemas/system/osso/connectivity/providers/wireguard/Default/Address</key>
+      <applyto>/system/osso/connectivity/providers/wireguard/Default/Address</applyto>
       <owner>applet-wireguard</owner>
       <type>string</type>
       <default></default>
@@ -51,8 +51,8 @@
     </schema>
 
     <schema>
-      <key>/schemas/system/maemo/wireguard/Default/ListenPort</key>
-      <applyto>/system/maemo/wireguard/Default/ListenPort</applyto>
+      <key>/schemas/system/osso/connectivity/providers/wireguard/Default/ListenPort</key>
+      <applyto>/system/osso/connectivity/providers/wireguard/Default/ListenPort</applyto>
       <owner>applet-wireguard</owner>
       <type>int</type>
       <default></default>

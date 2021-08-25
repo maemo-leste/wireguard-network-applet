@@ -23,7 +23,7 @@
 #define xstr(x) str(x)
 */
 
-#define GC_WIREGUARD "/system/maemo/wireguard"
+#define GC_WIREGUARD "/system/osso/connectivity/providers/wireguard"
 #define GC_WIREGUARD_ACTIVE GC_WIREGUARD"/active_config"
 
 #define GC_CFG_TUNNELENABLED "systemtunnel-enabled"
