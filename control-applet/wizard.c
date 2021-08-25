@@ -50,6 +50,11 @@ static gint find_next_wizard_page(gint cur_page, gpointer data)
 
 	}
 
+	if (cur_page == w_data->local_page) {
+		if (w_data->peers_page > 0)
+			return w_data->peers_page;
+	}
+
 	return -1;
 }
 
@@ -90,7 +95,6 @@ static void on_assistant_apply(GtkWidget * widget, gpointer data)
 	return;
 }
 
-/*
 static void on_assistant_prepare(GtkWidget * assistant,
 				 GtkWidget * page, gpointer data)
 {
@@ -99,9 +103,8 @@ static void on_assistant_prepare(GtkWidget * assistant,
 	gint page_number =
 	    gtk_assistant_get_current_page(GTK_ASSISTANT(assistant));
 
-	if (page_number == w_data->bridges_page
-	    || page_number == w_data->hs_page) {
-		if (w_data->hs_page > 0 || w_data->adv_page > 0)
+	if (page_number == w_data->local_page) {
+		if (w_data->peers_page > 0)
 			gtk_assistant_set_page_type(GTK_ASSISTANT(assistant),
 						    page,
 						    GTK_ASSISTANT_PAGE_CONTENT);
@@ -112,91 +115,11 @@ static void on_assistant_prepare(GtkWidget * assistant,
 		return;
 	}
 
-	if (page_number == w_data->adv_page) {
+	if (page_number == w_data->peers_page) {
 		gtk_assistant_set_page_type(GTK_ASSISTANT(assistant), page,
 					    GTK_ASSISTANT_PAGE_CONFIRM);
 		return;
 	}
-}
-*/
-
-static void on_conf_name_entry_changed(GtkWidget * widget, gpointer data)
-{
-	struct wizard_data *w_data = data;
-	GtkAssistant *assistant = GTK_ASSISTANT(w_data->assistant);
-	GtkWidget *cur_page;
-	gint page_number;
-	const gchar *text;
-	gboolean valid = TRUE;
-
-	page_number = gtk_assistant_get_current_page(assistant);
-	cur_page = gtk_assistant_get_nth_page(assistant, page_number);
-	text = gtk_entry_get_text(GTK_ENTRY(widget));
-
-	/* TODO: Also check for name clash if we're not editing an existing cfg */
-	if (text && *text) {
-		/* For sanity's sake, we'll only allow alphanumeric names */
-		for (int i = 0; i < strlen(text); i++) {
-			if (!g_ascii_isalnum(text[i])) {
-				valid = FALSE;
-				break;
-			}
-		}
-	} else {
-		valid = FALSE;
-	}
-
-	gtk_assistant_set_page_complete(assistant, cur_page, valid);
-}
-
-static void new_wizard_main_page(struct wizard_data *w_data)
-{
-	GtkWidget *vbox, *box, *info, *name_label;
-
-	vbox = gtk_vbox_new(FALSE, 5);
-	box = gtk_hbox_new(FALSE, 12);
-
-	gtk_container_set_border_width(GTK_CONTAINER(vbox), 15);
-	gtk_container_set_border_width(GTK_CONTAINER(box), 12);
-
-	info = gtk_label_new("This wizard will help you configure Wireguard");
-
-	name_label = gtk_label_new("Configuration name:");
-
-	w_data->name_entry = gtk_entry_new();
-	if (w_data->config_name != NULL)
-		gtk_entry_set_text(GTK_ENTRY(w_data->name_entry),
-				   w_data->config_name);
-
-	g_signal_connect(G_OBJECT(w_data->name_entry), "changed",
-			 G_CALLBACK(on_conf_name_entry_changed), w_data);
-
-	w_data->transproxy_chk =
-	    gtk_check_button_new_with_label("Enable system-wide tunneling");
-	if (w_data->transproxy_enabled)
-		g_object_set(G_OBJECT(w_data->transproxy_chk), "active", TRUE,
-			     NULL);
-
-	gtk_box_pack_start(GTK_BOX(box), name_label, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(box), w_data->name_entry, TRUE, TRUE, 0);
-	gtk_widget_show_all(box);
-
-	gtk_box_pack_start(GTK_BOX(vbox), info, TRUE, TRUE, 0);
-	gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(vbox), w_data->transproxy_chk, FALSE, FALSE,
-			   0);
-
-	gtk_widget_show_all(vbox);
-
-	gtk_assistant_append_page(GTK_ASSISTANT(w_data->assistant), vbox);
-	gtk_assistant_set_page_title(GTK_ASSISTANT
-				     (w_data->assistant), vbox,
-				     "Wireguard Configuration Wizard");
-	gtk_assistant_set_page_type(GTK_ASSISTANT(w_data->assistant),
-				    vbox, GTK_ASSISTANT_PAGE_CONFIRM);
-
-	if (w_data->config_name)
-		on_conf_name_entry_changed(w_data->name_entry, w_data);
 }
 
 static void wg_privkey_generate_cb(GtkWidget * widget, gpointer data)
@@ -390,6 +313,188 @@ static gint new_wizard_local_page(struct wizard_data *w_data)
 	return rv;
 }
 
+static gint new_wizard_peer_page(struct wizard_data *w_data)
+{
+	gint rv;
+	GtkWidget *vbox;
+	GtkWidget *pubkey_lbl, *psk_lbl, *endpoint_lbl, *ips_lbl;
+	GtkWidget *save_btn, *del_btn, *prev_btn, *next_btn;
+	//struct wg_peer *peer = g_new0(struct wg_peer, 1);
+
+	vbox = gtk_vbox_new(TRUE, 2);
+
+	gtk_container_set_border_width(GTK_CONTAINER(vbox), 15);
+
+	/* Public key entry */
+	GtkWidget *hb0 = gtk_hbox_new(FALSE, 2);
+	pubkey_lbl = gtk_label_new("Public key:");
+	w_data->p_pubkey_entry = gtk_entry_new();
+
+	gtk_box_pack_start(GTK_BOX(hb0), pubkey_lbl, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(hb0), w_data->p_pubkey_entry, TRUE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), hb0, TRUE, TRUE, 0);
+
+	/* PSK entry */
+	GtkWidget *hb1 = gtk_hbox_new(FALSE, 2);
+	psk_lbl = gtk_label_new("Preshared key:");
+	w_data->p_psk_entry = gtk_entry_new();
+	gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry), "(optional)");
+
+	gtk_box_pack_start(GTK_BOX(hb1), psk_lbl, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(hb1), w_data->p_psk_entry, TRUE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), hb1, TRUE, TRUE, 0);
+
+	/* Endpoint entry */
+	GtkWidget *hb2 = gtk_hbox_new(FALSE, 2);
+	endpoint_lbl = gtk_label_new("Endpoint:");
+	w_data->p_endpoint_entry = gtk_entry_new();
+
+	gtk_box_pack_start(GTK_BOX(hb2), endpoint_lbl, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(hb2), w_data->p_endpoint_entry, TRUE, TRUE,
+			   0);
+	gtk_box_pack_start(GTK_BOX(vbox), hb2, TRUE, TRUE, 0);
+
+	/* AllowedIPs entry */
+	GtkWidget *hb3 = gtk_hbox_new(FALSE, 2);
+	ips_lbl = gtk_label_new("Allowed IPs:");
+	w_data->p_ips_entry = gtk_entry_new();
+
+	gtk_box_pack_start(GTK_BOX(hb3), ips_lbl, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(hb3), w_data->p_ips_entry, TRUE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), hb3, TRUE, TRUE, 0);
+
+	/* Save/Delete/Previous/Next */
+	GtkWidget *hb4 = gtk_hbox_new(FALSE, 2);
+	save_btn = gtk_button_new_with_label("Save peer");
+	del_btn = gtk_button_new_with_label("Delete peer");
+	prev_btn = gtk_button_new_with_label("Previous");
+	next_btn = gtk_button_new_with_label("Next");
+
+	gtk_box_pack_start(GTK_BOX(hb4), save_btn, TRUE, TRUE, 2);
+	gtk_box_pack_start(GTK_BOX(hb4), del_btn, TRUE, TRUE, 2);
+	gtk_box_pack_start(GTK_BOX(hb4), prev_btn, TRUE, TRUE, 2);
+	gtk_box_pack_start(GTK_BOX(hb4), next_btn, TRUE, TRUE, 2);
+	gtk_box_pack_start(GTK_BOX(vbox), hb4, TRUE, TRUE, 0);
+
+	gtk_widget_show_all(vbox);
+
+	rv = gtk_assistant_append_page(GTK_ASSISTANT(w_data->assistant), vbox);
+	gtk_assistant_set_page_title(GTK_ASSISTANT(w_data->assistant), vbox,
+				     "Peer configuration");
+
+	return rv;
+}
+
+static void on_conf_name_entry_changed(GtkWidget * widget, gpointer data)
+{
+	struct wizard_data *w_data = data;
+	GtkAssistant *assistant = GTK_ASSISTANT(w_data->assistant);
+	GtkWidget *cur_page;
+	gint page_number;
+	const gchar *text;
+	gboolean valid = TRUE;
+
+	page_number = gtk_assistant_get_current_page(assistant);
+	cur_page = gtk_assistant_get_nth_page(assistant, page_number);
+	text = gtk_entry_get_text(GTK_ENTRY(widget));
+
+	/* TODO: Also check for name clash if we're not editing an existing cfg */
+	if (text && *text) {
+		/* For sanity's sake, we'll only allow alphanumeric names */
+		for (int i = 0; i < strlen(text); i++) {
+			if (!g_ascii_isalnum(text[i])) {
+				valid = FALSE;
+				break;
+			}
+		}
+	} else {
+		valid = FALSE;
+	}
+
+	gtk_assistant_set_page_complete(assistant, cur_page, valid);
+}
+
+static void on_peers_chk_toggled(GtkWidget * widget, gpointer data)
+{
+	(void)widget;
+	struct wizard_data *w_data = data;
+	gboolean active;
+
+	/* We assume page should be 0, as the checkbox is there */
+	g_object_get(G_OBJECT(w_data->peers_chk), "active", &active, NULL);
+
+	if (active) {
+		w_data->peers_page = new_wizard_peer_page(w_data);
+		w_data->has_peers = TRUE;
+		return;
+	}
+
+	w_data->peers_page = -1;
+	w_data->has_peers = FALSE;
+}
+
+static void new_wizard_main_page(struct wizard_data *w_data)
+{
+	GtkWidget *vbox, *box, *info, *name_label;
+
+	vbox = gtk_vbox_new(FALSE, 5);
+	box = gtk_hbox_new(FALSE, 12);
+
+	gtk_container_set_border_width(GTK_CONTAINER(vbox), 15);
+	gtk_container_set_border_width(GTK_CONTAINER(box), 12);
+
+	info = gtk_label_new("This wizard will help you configure Wireguard");
+
+	name_label = gtk_label_new("Configuration name:");
+
+	w_data->name_entry = gtk_entry_new();
+	if (w_data->config_name != NULL)
+		gtk_entry_set_text(GTK_ENTRY(w_data->name_entry),
+				   w_data->config_name);
+
+	g_signal_connect(G_OBJECT(w_data->name_entry), "changed",
+			 G_CALLBACK(on_conf_name_entry_changed), w_data);
+
+	w_data->transproxy_chk =
+	    gtk_check_button_new_with_label("Enable system-wide tunneling");
+	if (w_data->transproxy_enabled)
+		g_object_set(G_OBJECT(w_data->transproxy_chk), "active", TRUE,
+			     NULL);
+
+	w_data->peers_chk = gtk_check_button_new_with_label("Add peers");
+	if (w_data->has_peers)
+		g_object_set(G_OBJECT(w_data->peers_chk), "active", TRUE, NULL);
+
+	g_signal_connect(G_OBJECT(w_data->peers_chk), "toggled",
+			 G_CALLBACK(on_peers_chk_toggled), w_data);
+
+	gtk_box_pack_start(GTK_BOX(box), name_label, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(box), w_data->name_entry, TRUE, TRUE, 0);
+	gtk_widget_show_all(box);
+
+	gtk_box_pack_start(GTK_BOX(vbox), info, TRUE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), w_data->transproxy_chk, FALSE, FALSE,
+			   0);
+
+	gtk_widget_show_all(vbox);
+
+	gtk_assistant_append_page(GTK_ASSISTANT(w_data->assistant), vbox);
+
+	gtk_assistant_set_page_title(GTK_ASSISTANT
+				     (w_data->assistant), vbox,
+				     "Wireguard Configuration Wizard");
+
+	gtk_assistant_set_page_type(GTK_ASSISTANT(w_data->assistant),
+				    vbox, GTK_ASSISTANT_PAGE_CONFIRM);
+
+	if (w_data->config_name)
+		on_conf_name_entry_changed(w_data->name_entry, w_data);
+
+	if (w_data->has_peers)
+		on_peers_chk_toggled(w_data->peers_chk, w_data);
+}
+
 void start_new_wizard(gpointer config_data)
 {
 	struct wizard_data *w_data;
@@ -421,10 +526,8 @@ void start_new_wizard(gpointer config_data)
 			 G_CALLBACK
 			 (on_assistant_close_cancel), &w_data->assistant);
 
-	/*
-	   g_signal_connect(G_OBJECT(w_data->assistant), "prepare",
-	   G_CALLBACK(on_assistant_prepare), w_data);
-	 */
+	g_signal_connect(G_OBJECT(w_data->assistant), "prepare",
+			 G_CALLBACK(on_assistant_prepare), w_data);
 
 	g_signal_connect(G_OBJECT(w_data->assistant),
 			 "apply", G_CALLBACK(on_assistant_apply), w_data);

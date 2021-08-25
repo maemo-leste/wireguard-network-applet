@@ -31,10 +31,6 @@ struct wg_peer {
 	gchar *preshared_key;
 	gchar *endpoint;
 	gchar *allowed_ips;
-	GtkWidget *public_key_entry;
-	GtkWidget *preshared_key_entry;
-	GtkWidget *endpoint_entry;
-	GtkWidget *allowed_ips_entry;
 };
 
 struct wizard_data {
@@ -55,8 +51,14 @@ struct wizard_data {
 	GtkWidget *dnsaddr_entry;
 
 	GtkWidget *peers_chk;
+	gboolean has_peers;
 
-	struct wg_peer *peers[];
+	GPtrArray *peers;
+
+	GtkWidget *p_pubkey_entry;
+	GtkWidget *p_psk_entry;
+	GtkWidget *p_endpoint_entry;
+	GtkWidget *p_ips_entry;
 };
 
 void start_new_wizard(gpointer config_data);
