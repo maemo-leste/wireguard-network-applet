@@ -513,7 +513,14 @@ static void validate_peer_cb(GtkWidget * widget, gpointer data)
 	peer->endpoint = g_strdup(fendpoint);
 	peer->allowed_ips = g_strdup(fips);
 
-	g_ptr_array_add(w_data->peers, peer);
+	if (w_data->peer_idx >= w_data->peers->len) {
+		g_ptr_array_add(w_data->peers, peer);
+	} else {
+		struct wg_peer *p;
+		p = g_ptr_array_steal_index(w_data->peers, w_data->peer_idx);
+		free_peer(p, NULL);
+		g_ptr_array_insert(w_data->peers, w_data->peer_idx, peer);
+	}
 
 	gtk_assistant_set_page_complete(assistant, cur_page, TRUE);
 
