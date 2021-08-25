@@ -31,6 +31,10 @@ struct wg_peer {
 	gchar *preshared_key;
 	gchar *endpoint;
 	gchar *allowed_ips;
+	GtkWidget *public_key_entry;
+	GtkWidget *preshared_key_entry;
+	GtkWidget *endpoint_entry;
+	GtkWidget *allowed_ips_entry;
 };
 
 struct wizard_data {
@@ -45,12 +49,12 @@ struct wizard_data {
 	gint local_page;
 	gint peers_page;
 
-	GtkWidget *private_key_entry;
-	GtkWidget *public_key_entry;
-	GtkWidget *address_entry;
-	GtkWidget *dns_address_entry;
+	GtkWidget *privkey_entry;
+	GtkWidget *pubkey_entry;
+	GtkWidget *addr_entry;
+	GtkWidget *dnsaddr_entry;
 
-	GtkWidget *has_peers_chk;
+	GtkWidget *peers_chk;
 
 	struct wg_peer *peers[];
 };

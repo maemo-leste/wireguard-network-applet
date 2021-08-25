@@ -215,8 +215,7 @@ static void wg_privkey_generate_cb(GtkWidget * widget, gpointer data)
 	private_key = g_strsplit(pk, "\n", 2);
 	g_free(pk);
 
-	gtk_entry_set_text(GTK_ENTRY(w_data->private_key_entry),
-			   private_key[0]);
+	gtk_entry_set_text(GTK_ENTRY(w_data->privkey_entry), private_key[0]);
 	g_strfreev(private_key);
 }
 
@@ -234,7 +233,7 @@ static void validate_interface_cb(GtkWidget * widget, gpointer data)
 	cur_page = gtk_assistant_get_nth_page(assistant, page_number);
 
 	/* Validate the DNS address */
-	dns_addr = gtk_entry_get_text(GTK_ENTRY(w_data->dns_address_entry));
+	dns_addr = gtk_entry_get_text(GTK_ENTRY(w_data->dnsaddr_entry));
 	if (!g_hostname_is_ip_address(dns_addr)) {
 		g_warning("DNS Address is invalid");
 		goto invalid;
@@ -244,30 +243,35 @@ static void validate_interface_cb(GtkWidget * widget, gpointer data)
 	 * This is in the form of 10.0.0.1/24, so we split it and do some
 	 * kind of validation
 	 */
-	iface_addr = gtk_entry_get_text(GTK_ENTRY(w_data->address_entry));
+	iface_addr = gtk_entry_get_text(GTK_ENTRY(w_data->addr_entry));
 	addr_toks = g_strsplit(iface_addr, "/", 2);
 	if (g_strv_length(addr_toks) != 2) {
 		g_strfreev(addr_toks);
 		goto invalid;
 	}
+
 	if (!g_hostname_is_ip_address(addr_toks[0])) {
 		g_warning("Address is invalid");
 		g_strfreev(addr_toks);
 		goto invalid;
 	}
+
 	subnet = g_ascii_strtoll(addr_toks[1], NULL, 10);
 	g_message("%ld", subnet);
+
 	if (subnet < 16 || subnet > 30) {
 		g_warning("Subnet is invalid");
 		g_strfreev(addr_toks);
 		goto invalid;
 	}
+
 	g_strfreev(addr_toks);
 
-	/* And we try to check if the keys are valid */
+	/* And finally we try to check if the keys are valid */
 	/* They're always 44 bytes encoded. */
-	privkey = gtk_entry_get_text(GTK_ENTRY(w_data->private_key_entry));
-	pubkey = gtk_entry_get_text(GTK_ENTRY(w_data->public_key_entry));
+	privkey = gtk_entry_get_text(GTK_ENTRY(w_data->privkey_entry));
+	pubkey = gtk_entry_get_text(GTK_ENTRY(w_data->pubkey_entry));
+
 	if (strlen(privkey) != 44 || strlen(pubkey) != 44) {
 		g_warning("Keys are invalid");
 		goto invalid;
@@ -283,17 +287,17 @@ static void validate_interface_cb(GtkWidget * widget, gpointer data)
 static void validate_privkey_cb(GtkWidget * widget, gpointer data)
 {
 	struct wizard_data *w_data = data;
-	const gchar *secret_key;
-	gchar **public_key, *pk = NULL;
+	const gchar *privkey;
+	gchar **pubkey, *pk = NULL;
 	gchar *cmd_pk[] = { "/usr/bin/wg", "pubkey", NULL };
 
-	secret_key = gtk_entry_get_text(GTK_ENTRY(w_data->private_key_entry));
-	gtk_entry_set_text(GTK_ENTRY(w_data->public_key_entry), "");
+	privkey = gtk_entry_get_text(GTK_ENTRY(w_data->privkey_entry));
+	gtk_entry_set_text(GTK_ENTRY(w_data->pubkey_entry), "");
 
-	if (strlen(secret_key) != 44)
+	if (strlen(privkey) != 44)
 		return;
 
-	if (pipe_cmd(cmd_pk, (gchar *) secret_key, &pk)) {
+	if (pipe_cmd(cmd_pk, (gchar *) privkey, &pk)) {
 		g_warning("Failed to calculate Wireguard public key");
 		if (pk != NULL)
 			g_free(pk);
@@ -303,76 +307,80 @@ static void validate_privkey_cb(GtkWidget * widget, gpointer data)
 	if (pk == NULL)
 		return;
 
-	public_key = g_strsplit(pk, "\n", 2);
+	pubkey = g_strsplit(pk, "\n", 2);
 	g_free(pk);
 
-	gtk_entry_set_text(GTK_ENTRY(w_data->public_key_entry), public_key[0]);
-	g_strfreev(public_key);
+	gtk_entry_set_text(GTK_ENTRY(w_data->pubkey_entry), pubkey[0]);
+	g_strfreev(pubkey);
 }
 
 static gint new_wizard_local_page(struct wizard_data *w_data)
 {
 	gint rv;
-	GtkWidget *vbox;
-	GtkWidget *btn_generate, *private_key_label, *public_key_label,
-	    *address_label, *dns_address_label;
+	GtkWidget *vbox, *btn_generate;
+	GtkWidget *privkey_lbl, *pubkey_lbl, *addr_lbl, *dnsaddr_lbl;
 
 	vbox = gtk_vbox_new(TRUE, 2);
 
 	gtk_container_set_border_width(GTK_CONTAINER(vbox), 15);
 
-	GtkWidget *hbox0 = gtk_hbox_new(FALSE, 2);
+	/* Private key entry and generation button */
+	GtkWidget *hb0 = gtk_hbox_new(FALSE, 2);
 
-	private_key_label = gtk_label_new("Private key:");
-	w_data->private_key_entry = gtk_entry_new();
+	privkey_lbl = gtk_label_new("Private key:");
+	w_data->privkey_entry = gtk_entry_new();
+
 	btn_generate = gtk_button_new_with_label("Generate");
-	gtk_box_pack_start(GTK_BOX(hbox0), private_key_label, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(hbox0), w_data->private_key_entry, TRUE,
-			   TRUE, 0);
-	gtk_box_pack_start(GTK_BOX(hbox0), btn_generate, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(vbox), hbox0, TRUE, TRUE, 0);
+
+	gtk_box_pack_start(GTK_BOX(hb0), privkey_lbl, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(hb0), w_data->privkey_entry, TRUE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(hb0), btn_generate, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), hb0, TRUE, TRUE, 0);
+
 	g_signal_connect(G_OBJECT(btn_generate), "clicked",
 			 G_CALLBACK(wg_privkey_generate_cb), w_data);
 
-	GtkWidget *hbox1 = gtk_hbox_new(FALSE, 2);
-	public_key_label = gtk_label_new("Public key:");
-	w_data->public_key_entry = gtk_entry_new();
-	gtk_widget_set_sensitive(w_data->public_key_entry, FALSE);
-	gtk_box_pack_start(GTK_BOX(hbox1), public_key_label, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(hbox1), w_data->public_key_entry, TRUE,
-			   TRUE, 0);
-	gtk_box_pack_start(GTK_BOX(vbox), hbox1, TRUE, TRUE, 0);
-
-	GtkWidget *hbox2 = gtk_hbox_new(FALSE, 2);
-	address_label = gtk_label_new("Address:");
-	w_data->address_entry = gtk_entry_new();
-	gtk_box_pack_start(GTK_BOX(hbox2), address_label, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(hbox2), w_data->address_entry, TRUE,
-			   TRUE, 0);
-	gtk_box_pack_start(GTK_BOX(vbox), hbox2, TRUE, TRUE, 0);
-
-	GtkWidget *hbox3 = gtk_hbox_new(FALSE, 2);
-	dns_address_label = gtk_label_new("DNS Address:");
-	w_data->dns_address_entry = gtk_entry_new();
-	gtk_box_pack_start(GTK_BOX(hbox3), dns_address_label, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(hbox3), w_data->dns_address_entry, TRUE,
-			   TRUE, 0);
-	gtk_box_pack_start(GTK_BOX(vbox), hbox3, TRUE, TRUE, 0);
-
-	GtkWidget *hbox4 = gtk_hbox_new(FALSE, 2);
-	w_data->has_peers_chk = gtk_check_button_new_with_label("Add peers");
-	gtk_box_pack_start(GTK_BOX(hbox4), w_data->has_peers_chk, FALSE, FALSE,
-			   0);
-	gtk_box_pack_start(GTK_BOX(vbox), hbox4, TRUE, TRUE, 0);
-
-	g_signal_connect(G_OBJECT(w_data->private_key_entry), "changed",
+	g_signal_connect(G_OBJECT(w_data->privkey_entry), "changed",
 			 G_CALLBACK(validate_privkey_cb), w_data);
 
-	g_signal_connect(G_OBJECT(w_data->address_entry), "changed",
+	/* Public key entry (insensitive) */
+	GtkWidget *hb1 = gtk_hbox_new(FALSE, 2);
+
+	pubkey_lbl = gtk_label_new("Public key:");
+	w_data->pubkey_entry = gtk_entry_new();
+	gtk_widget_set_sensitive(w_data->pubkey_entry, FALSE);
+
+	gtk_box_pack_start(GTK_BOX(hb1), pubkey_lbl, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(hb1), w_data->pubkey_entry, TRUE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), hb1, TRUE, TRUE, 0);
+
+	/* Address entry */
+	GtkWidget *hb2 = gtk_hbox_new(FALSE, 2);
+	addr_lbl = gtk_label_new("Address:");
+	w_data->addr_entry = gtk_entry_new();
+	gtk_box_pack_start(GTK_BOX(hb2), addr_lbl, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(hb2), w_data->addr_entry, TRUE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), hb2, TRUE, TRUE, 0);
+
+	g_signal_connect(G_OBJECT(w_data->addr_entry), "changed",
 			 G_CALLBACK(validate_interface_cb), w_data);
 
-	g_signal_connect(G_OBJECT(w_data->dns_address_entry), "changed",
+	/* DNS Address entry */
+	GtkWidget *hb3 = gtk_hbox_new(FALSE, 2);
+	dnsaddr_lbl = gtk_label_new("DNS Address:");
+	w_data->dnsaddr_entry = gtk_entry_new();
+	gtk_box_pack_start(GTK_BOX(hb3), dnsaddr_lbl, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(hb3), w_data->dnsaddr_entry, TRUE, TRUE, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), hb3, TRUE, TRUE, 0);
+
+	g_signal_connect(G_OBJECT(w_data->dnsaddr_entry), "changed",
 			 G_CALLBACK(validate_interface_cb), w_data);
+
+	/* Peers checkbox (should we add peer(s) or not) */
+	GtkWidget *hb4 = gtk_hbox_new(FALSE, 2);
+	w_data->peers_chk = gtk_check_button_new_with_label("Add peers");
+	gtk_box_pack_start(GTK_BOX(hb4), w_data->peers_chk, FALSE, FALSE, 0);
+	gtk_box_pack_start(GTK_BOX(vbox), hb4, TRUE, TRUE, 0);
 
 	gtk_widget_show_all(vbox);
 
@@ -385,6 +393,7 @@ static gint new_wizard_local_page(struct wizard_data *w_data)
 void start_new_wizard(gpointer config_data)
 {
 	struct wizard_data *w_data;
+
 	if (config_data == NULL) {
 		w_data = g_new0(struct wizard_data, 1);
 	} else {
@@ -392,33 +401,43 @@ void start_new_wizard(gpointer config_data)
 	}
 
 	w_data->assistant = gtk_assistant_new();
+
 	gtk_window_set_title(GTK_WINDOW(w_data->assistant),
 			     "Wireguard configuration");
 	gtk_assistant_set_forward_page_func(GTK_ASSISTANT
 					    (w_data->assistant),
 					    find_next_wizard_page,
 					    w_data, NULL);
+
 	new_wizard_main_page(w_data);
+
 	g_signal_connect(G_OBJECT(w_data->assistant),
 			 "cancel",
 			 G_CALLBACK
 			 (on_assistant_close_cancel), &w_data->assistant);
+
 	g_signal_connect(G_OBJECT(w_data->assistant),
 			 "close",
 			 G_CALLBACK
 			 (on_assistant_close_cancel), &w_data->assistant);
+
 	/*
 	   g_signal_connect(G_OBJECT(w_data->assistant), "prepare",
 	   G_CALLBACK(on_assistant_prepare), w_data);
 	 */
+
 	g_signal_connect(G_OBJECT(w_data->assistant),
 			 "apply", G_CALLBACK(on_assistant_apply), w_data);
+
 	GtkWidget *page =
 	    gtk_assistant_get_nth_page(GTK_ASSISTANT(w_data->assistant), 0);
+
 	gtk_assistant_set_page_type(GTK_ASSISTANT
 				    (w_data->assistant),
 				    page, GTK_ASSISTANT_PAGE_INTRO);
+
 	w_data->local_page = new_wizard_local_page(w_data);
+
 	gtk_widget_show_all(w_data->assistant);
 	gtk_main();
 	g_free(w_data);
