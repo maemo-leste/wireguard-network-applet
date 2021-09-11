@@ -26,6 +26,7 @@
 #include <hildon/hildon.h>
 #include <libhildondesktop/libhildondesktop.h>
 #include <libosso.h>
+#include <icd/wireguard/libicd_wireguard_shared.h>
 
 /* Use this for debugging */
 #include <syslog.h>
@@ -37,8 +38,7 @@
 
 #define SETTINGS_RESPONSE -69
 
-#define GC_WIREGUARD         "/system/osso/connectivity/providers/wireguard"
-#define GC_WIREGUARD_ACTIVE  GC_WIREGUARD"/active_config"
+#define DBUS_SIGNAL "type='signal',interface='"ICD_WIREGUARD_DBUS_INTERFACE"',member='"ICD_WIREGUARD_SIGNAL_STATUSCHANGED"'"
 
 typedef struct _StatusAppletWireguard StatusAppletWireguard;
 typedef struct _StatusAppletWireguardClass StatusAppletWireguardClass;
@@ -49,6 +49,12 @@ typedef enum {
 	WIREGUARD_CONNECTING = 1,
 	WIREGUARD_CONNECTED = 2,
 } WireguardConnState;
+
+typedef enum {
+	STATUS_ICON_NONE,
+	STATUS_ICON_CONNECTING,
+	STATUS_ICON_CONNECTED,
+} CurStatusIcon;
 
 struct _StatusAppletWireguard {
 	HDStatusMenuItem parent;
@@ -62,15 +68,26 @@ struct _StatusAppletWireguardClass {
 struct _StatusAppletWireguardPrivate {
 	osso_context_t *osso;
 	DBusConnection *dbus;
+
 	gchar *active_config;
 	GtkWidget *menu_button;
+
 	WireguardConnState connection_state;
+
+	gboolean systemwide_enabled;
 	gboolean provider_connected;
-	gboolean wg_running;
+
 	GtkWidget *settings_dialog;
 	GtkWidget *wg_chkbtn;
 	GtkWidget *config_btn;
 	GtkWidget *touch_selector;
+
+	GdkPixbuf *pix18_wg_connected;
+	GdkPixbuf *pix18_wg_connecting;
+	GdkPixbuf *pix48_wg_disabled;
+	GdkPixbuf *pix48_wg_enabled;
+
+	CurStatusIcon current_status_icon;
 };
 
 HD_DEFINE_PLUGIN_MODULE_WITH_PRIVATE(StatusAppletWireguard,
@@ -81,28 +98,34 @@ HD_DEFINE_PLUGIN_MODULE_WITH_PRIVATE(StatusAppletWireguard,
 static void save_settings(StatusAppletWireguard * self)
 {
 	StatusAppletWireguardPrivate *p = GET_PRIVATE(self);
+	GConfClient *gconf = gconf_client_get_default();
+	gboolean new_systemwide_enabled;
+	gchar *saved_config;
+
+	saved_config =
+	    gconf_client_get_string(gconf, GC_WIREGUARD_ACTIVE, NULL);
+	if (saved_config == NULL)
+		goto out;
 
 	p->active_config =
 	    hildon_touch_selector_get_current_text(HILDON_TOUCH_SELECTOR
 						   (p->touch_selector));
 
-	GConfClient *gconf = gconf_client_get_default();
-	gconf_client_set_string(gconf, GC_WIREGUARD_ACTIVE, p->active_config,
-				NULL);
-	g_object_unref(gconf);
-}
+	if (g_strcmp0(saved_config, p->active_config))
+		gconf_client_set_string(gconf, GC_WIREGUARD_ACTIVE,
+					p->active_config, NULL);
 
-static void toggle_wg_daemon(StatusAppletWireguard * self)
-{
-	StatusAppletWireguardPrivate *p = GET_PRIVATE(self);
+	new_systemwide_enabled =
+	    hildon_check_button_get_active(HILDON_CHECK_BUTTON(p->wg_chkbtn));
 
-	if (hildon_check_button_get_active(HILDON_CHECK_BUTTON(p->wg_chkbtn))) {
-		status_debug("wg-sb: Starting Wireguard");
-		/* TODO: Issue dbus call to start */
-	} else {
-		status_debug("wg-sb: Stopping Wireguard");
-		/* TODO: Issue dbus call to stop */
+	if (p->systemwide_enabled != new_systemwide_enabled) {
+		gconf_client_set_bool(gconf, GC_WIREGUARD_SYSTEM,
+				      new_systemwide_enabled, NULL);
+		p->systemwide_enabled = new_systemwide_enabled;
 	}
+
+ out:
+	g_object_unref(gconf);
 }
 
 static void execute_cp_plugin(GtkWidget * btn, StatusAppletWireguard * self)
@@ -119,11 +142,20 @@ static void execute_cp_plugin(GtkWidget * btn, StatusAppletWireguard * self)
 	}
 }
 
+static void set_buttons_sensitivity(StatusAppletWireguard * obj, gboolean state)
+{
+	StatusAppletWireguardPrivate *p = GET_PRIVATE(obj);
+
+	gtk_widget_set_sensitive(p->wg_chkbtn, state);
+	gtk_widget_set_sensitive(p->config_btn, state);
+}
+
 static void status_menu_clicked_cb(GtkWidget * btn,
 				   StatusAppletWireguard * self)
 {
 	StatusAppletWireguardPrivate *p = GET_PRIVATE(self);
 	GtkWidget *toplevel = gtk_widget_get_toplevel(btn);
+	GConfClient *gconf = gconf_client_get_default();
 	GtkSizeGroup *size_group;
 
 	gtk_widget_hide(toplevel);
@@ -142,12 +174,10 @@ static void status_menu_clicked_cb(GtkWidget * btn,
 	p->wg_chkbtn =
 	    hildon_check_button_new(HILDON_SIZE_FINGER_HEIGHT |
 				    HILDON_SIZE_AUTO_WIDTH);
+
 	gtk_button_set_label(GTK_BUTTON(p->wg_chkbtn),
 			     "Enable system-wide tunneling");
-	hildon_check_button_set_active(HILDON_CHECK_BUTTON(p->wg_chkbtn),
-				       p->wg_running);
 
-	/* TODO: Connect with saved configurations from control panel */
 	size_group = gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL);
 	p->touch_selector = hildon_touch_selector_new_text();
 
@@ -161,10 +191,13 @@ static void status_menu_clicked_cb(GtkWidget * btn,
 				    1.0);
 
 	/* Fill the selector with available configs */
-	GConfClient *gconf = gconf_client_get_default();
+	hildon_check_button_set_active(HILDON_CHECK_BUTTON(p->wg_chkbtn),
+				       gconf_client_get_bool(gconf,
+							     GC_WIREGUARD_SYSTEM,
+							     NULL));
+
 	GSList *configs, *iter;
 	configs = gconf_client_all_dirs(gconf, GC_WIREGUARD, NULL);
-	g_object_unref(gconf);
 
 	/* Counter for figuring out the active config */
 	int i = -1;
@@ -193,19 +226,13 @@ static void status_menu_clicked_cb(GtkWidget * btn,
 	gtk_box_pack_start(GTK_BOX(GTK_DIALOG(p->settings_dialog)->vbox),
 			   p->config_btn, TRUE, TRUE, 0);
 
-	/* Make the buttons insensitive when provider is connected.
-	 * At this time the daemon is controlled by icd and not this applet.
-	 */
-	if (p->provider_connected) {
-		gtk_widget_set_sensitive(p->wg_chkbtn, FALSE);
-		gtk_widget_set_sensitive(p->config_btn, FALSE);
-	}
+	/* Make the buttons insensitive when provider is connected. */
+	set_buttons_sensitivity(self, !p->provider_connected);
 
 	gtk_widget_show_all(p->settings_dialog);
 	switch (gtk_dialog_run(GTK_DIALOG(p->settings_dialog))) {
 	case GTK_RESPONSE_ACCEPT:
 		save_settings(self);
-		toggle_wg_daemon(self);
 		break;
 	case SETTINGS_RESPONSE:
 		execute_cp_plugin(btn, self);
@@ -213,42 +240,67 @@ static void status_menu_clicked_cb(GtkWidget * btn,
 		break;
 	}
 
+	g_object_unref(gconf);
 	gtk_widget_hide_all(p->settings_dialog);
 	gtk_widget_destroy(p->settings_dialog);
+}
+
+static void set_status_icon(gpointer obj, GdkPixbuf * pixbuf)
+{
+	hd_status_plugin_item_set_status_area_icon(HD_STATUS_PLUGIN_ITEM(obj),
+						   pixbuf);
+}
+
+static int blink_status_icon(gpointer obj)
+{
+	StatusAppletWireguard *sa = STATUS_APPLET_WIREGUARD(obj);
+	StatusAppletWireguardPrivate *p = GET_PRIVATE(sa);
+
+	if (p->connection_state != WIREGUARD_CONNECTING)
+		return FALSE;
+
+	switch (p->current_status_icon) {
+	case STATUS_ICON_NONE:
+	case STATUS_ICON_CONNECTED:
+		set_status_icon(obj, p->pix18_wg_connecting);
+		p->current_status_icon = STATUS_ICON_CONNECTING;
+		break;
+	case STATUS_ICON_CONNECTING:
+		set_status_icon(obj, p->pix18_wg_connected);
+		p->current_status_icon = STATUS_ICON_CONNECTED;
+		break;
+	}
+
+	return TRUE;
 }
 
 static void status_applet_wireguard_set_icons(StatusAppletWireguard * self)
 {
 	StatusAppletWireguard *sa = STATUS_APPLET_WIREGUARD(self);
 	StatusAppletWireguardPrivate *p = GET_PRIVATE(sa);
-	GtkIconTheme *theme = gtk_icon_theme_get_default();
 	GdkPixbuf *menu_pixbuf = NULL;
-	GdkPixbuf *status_pixbuf = NULL;
 
 	switch (p->connection_state) {
 	case WIREGUARD_NOT_CONNECTED:
-		menu_pixbuf =
-		    gtk_icon_theme_load_icon(theme,
-					     "statusarea_wireguard_disabled",
-					     48, 0, NULL);
+		menu_pixbuf = p->pix48_wg_disabled;
 		hildon_button_set_value(HILDON_BUTTON(p->menu_button),
 					"Disconnected");
+		set_status_icon(self, NULL);
+		p->current_status_icon = STATUS_ICON_NONE;
 		break;
 	case WIREGUARD_CONNECTING:
 		hildon_button_set_value(HILDON_BUTTON(p->menu_button),
 					"Connecting");
+		set_status_icon(self, p->pix18_wg_connecting);
+		p->current_status_icon = STATUS_ICON_CONNECTING;
+		g_timeout_add_seconds(1, blink_status_icon, sa);
 		break;
 	case WIREGUARD_CONNECTED:
-		menu_pixbuf =
-		    gtk_icon_theme_load_icon(theme,
-					     "statusarea_wireguard_enabled", 48,
-					     0, NULL);
-		status_pixbuf =
-		    gtk_icon_theme_load_icon(theme,
-					     "statusarea_wireguard_connected",
-					     18, 0, NULL);
+		menu_pixbuf = p->pix48_wg_enabled;
 		hildon_button_set_value(HILDON_BUTTON(p->menu_button),
 					"Connected");
+		set_status_icon(self, p->pix18_wg_connected);
+		p->current_status_icon = STATUS_ICON_CONNECTED;
 		break;
 	default:
 		g_critical("%s: Invalid connection_state", G_STRLOC);
@@ -260,15 +312,6 @@ static void status_applet_wireguard_set_icons(StatusAppletWireguard * self)
 					gtk_image_new_from_pixbuf(menu_pixbuf));
 		hildon_button_set_image_position(HILDON_BUTTON(p->menu_button),
 						 0);
-		g_object_unref(menu_pixbuf);
-	}
-
-	/* The icon is hidden when the pixbuf is NULL */
-	hd_status_plugin_item_set_status_area_icon(HD_STATUS_PLUGIN_ITEM(self),
-						   status_pixbuf);
-
-	if (status_pixbuf) {
-		g_object_unref(status_pixbuf);
 	}
 }
 
@@ -276,13 +319,30 @@ static int handle_running(gpointer obj, DBusMessage * msg)
 {
 	/* Either show or hide status icon */
 	StatusAppletWireguardPrivate *p = GET_PRIVATE(obj);
-	int status;
+	const gchar *status = NULL;
+	const gchar *mode = NULL;
 
-	dbus_message_get_args(msg, NULL, DBUS_TYPE_BYTE,
-			      &status, DBUS_TYPE_INVALID);
+	dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &status,
+			      DBUS_TYPE_STRING, &mode, DBUS_TYPE_INVALID);
 
-	p->provider_connected = TRUE;
-	p->wg_running = TRUE;
+	if (!g_strcmp0(status, ICD_WIREGUARD_SIGNALS_STATUS_STATE_CONNECTED))
+		p->connection_state = WIREGUARD_CONNECTED;
+	else if (!g_strcmp0(status, ICD_WIREGUARD_SIGNALS_STATUS_STATE_STARTED))
+		p->connection_state = WIREGUARD_CONNECTING;
+	else if (!g_strcmp0(status, ICD_WIREGUARD_SIGNALS_STATUS_STATE_STOPPED))
+		p->connection_state = WIREGUARD_NOT_CONNECTED;
+	else
+		p->connection_state = WIREGUARD_NOT_CONNECTED;
+
+	if (!g_strcmp0(mode, ICD_WIREGUARD_SIGNALS_STATUS_MODE_PROVIDER)) {
+		p->provider_connected = TRUE;
+		set_buttons_sensitivity(obj, FALSE);
+	} else {
+		p->provider_connected = FALSE;
+		set_buttons_sensitivity(obj, TRUE);
+	}
+
+	status_applet_wireguard_set_icons(obj);
 
 	return 0;
 }
@@ -292,7 +352,8 @@ static int on_icd_signal(DBusConnection * dbus, DBusMessage * msg, gpointer obj)
 	(void)dbus;
 
 	if (dbus_message_is_signal
-	    (msg, "org.maemo.WireguardProvider.Running", "Running"))
+	    (msg, ICD_WIREGUARD_DBUS_INTERFACE,
+	     ICD_WIREGUARD_SIGNAL_STATUSCHANGED))
 		return handle_running(obj, msg);
 
 	return 1;
@@ -309,11 +370,8 @@ static void setup_dbus_matching(StatusAppletWireguard * self)
 
 	dbus_connection_setup_with_g_main(p->dbus, NULL);
 
-	if (p->dbus) {
-		dbus_bus_add_match(p->dbus,
-				   "type='signal',interface='org.maemo.WireguardProvider.Running',member='Running'",
-				   NULL);
-	}
+	if (p->dbus)
+		dbus_bus_add_match(p->dbus, DBUS_SIGNAL, NULL);
 
 	if (!dbus_connection_add_filter
 	    (p->dbus, (DBusHandleMessageFunction) on_icd_signal, self, NULL)) {
@@ -322,29 +380,136 @@ static void setup_dbus_matching(StatusAppletWireguard * self)
 	}
 }
 
+static void get_provider_status(StatusAppletWireguard * self)
+{
+	StatusAppletWireguardPrivate *p = GET_PRIVATE(self);
+	DBusMessage *msg;
+	DBusMessageIter args;
+	DBusPendingCall *pending;
+	const gchar *status, *mode;
+
+	msg = dbus_message_new_method_call(ICD_WIREGUARD_DBUS_INTERFACE,
+					   ICD_WIREGUARD_DBUS_PATH,
+					   ICD_WIREGUARD_METHOD_GETSTATUS,
+					   "GetStatus");
+
+	if (msg == NULL) {
+		status_debug("wg-sb: %s: msg == NULL", G_STRFUNC);
+		goto noprovider;
+	}
+
+	if (!dbus_connection_send_with_reply(p->dbus, msg, &pending, -1)) {
+		status_debug("wg-sb: OOM at %s:%s", G_STRFUNC, G_STRLOC);
+		goto noprovider;
+	}
+
+	if (pending == NULL) {
+		status_debug("wg-sb: %s: pending == NULL", G_STRFUNC);
+		goto noprovider;
+	}
+
+	dbus_connection_flush(p->dbus);
+	dbus_message_unref(msg);
+
+	dbus_pending_call_block(pending);
+	msg = dbus_pending_call_steal_reply(pending);
+	dbus_pending_call_unref(pending);
+
+	if (msg == NULL) {
+		status_debug("wg-sb: %s: method reply is NULL", G_STRFUNC);
+		goto noprovider;
+	}
+
+	if (!dbus_message_iter_init(msg, &args)) {
+		status_debug("wg-sb: %s: reply has no arguments", G_STRFUNC);
+		dbus_message_unref(msg);
+		goto noprovider;
+	}
+
+	dbus_message_iter_get_basic(&args, &status);
+
+	if (!dbus_message_iter_next(&args)) {
+		status_debug("wg-sb: %s: reply has too few arguments",
+			     G_STRFUNC);
+		dbus_message_unref(msg);
+		goto noprovider;
+	}
+
+	dbus_message_iter_get_basic(&args, &mode);
+	dbus_message_unref(msg);
+
+	if (!g_strcmp0(ICD_WIREGUARD_SIGNALS_STATUS_MODE_PROVIDER, mode))
+		p->provider_connected = TRUE;
+	else
+		p->provider_connected = FALSE;
+
+	if (!g_strcmp0(ICD_WIREGUARD_SIGNALS_STATUS_STATE_CONNECTED, status)) {
+		p->connection_state = WIREGUARD_CONNECTED;
+		p->current_status_icon = STATUS_ICON_CONNECTED;
+	} else
+	    if (!g_strcmp0(ICD_WIREGUARD_SIGNALS_STATUS_STATE_STARTED, status))
+	{
+		p->connection_state = WIREGUARD_CONNECTING;
+		p->current_status_icon = STATUS_ICON_CONNECTING;
+	} else {
+		/* ICD_WIREGUARD_SIGNALS_STATUS_STATE_STOPPED */
+		p->connection_state = WIREGUARD_NOT_CONNECTED;
+		p->current_status_icon = STATUS_ICON_NONE;
+	}
+
+	return;
+
+ noprovider:
+	p->connection_state = WIREGUARD_NOT_CONNECTED;
+	p->provider_connected = FALSE;
+	p->current_status_icon = STATUS_ICON_NONE;
+}
+
 static void status_applet_wireguard_init(StatusAppletWireguard * self)
 {
 	StatusAppletWireguard *sa = STATUS_APPLET_WIREGUARD(self);
 	StatusAppletWireguardPrivate *p = GET_PRIVATE(sa);
 	DBusError err;
 	GConfClient *gconf;
+	GtkIconTheme *theme;
 
 	p->osso = osso_initialize("wg-sb", VERSION, FALSE, NULL);
 
 	dbus_error_init(&err);
 
-	p->connection_state = WIREGUARD_NOT_CONNECTED;
-	p->wg_running = FALSE;
-	p->provider_connected = FALSE;
-
 	/* Dbus setup for icd provider */
 	setup_dbus_matching(self);
 
+	/* Check if we're connected to a provider */
+	get_provider_status(self);
+
 	/* Get current config; make sure to keep this up to date */
 	gconf = gconf_client_get_default();
+
 	p->active_config =
 	    gconf_client_get_string(gconf, GC_WIREGUARD_ACTIVE, NULL);
+	p->systemwide_enabled =
+	    gconf_client_get_bool(gconf, GC_WIREGUARD_SYSTEM, NULL);
+
 	g_object_unref(gconf);
+
+	if (p->active_config == NULL)
+		p->active_config = "Default";
+
+	/* Icons */
+	theme = gtk_icon_theme_get_default();
+	p->pix18_wg_connected =
+	    gtk_icon_theme_load_icon(theme, "statusarea_wireguard_connected",
+				     18, 0, NULL);
+	p->pix18_wg_connecting =
+	    gtk_icon_theme_load_icon(theme, "statusarea_wireguard_connecting",
+				     18, 0, NULL);
+	p->pix48_wg_disabled =
+	    gtk_icon_theme_load_icon(theme, "statusarea_wireguard_disabled", 48,
+				     0, NULL);
+	p->pix48_wg_enabled =
+	    gtk_icon_theme_load_icon(theme, "statusarea_wireguard_enabled", 48,
+				     0, NULL);
 
 	/* Gtk items */
 	p->menu_button =
@@ -371,9 +536,7 @@ static void status_applet_wireguard_finalize(GObject * obj)
 	StatusAppletWireguardPrivate *p = GET_PRIVATE(sa);
 
 	if (p->dbus) {
-		dbus_bus_remove_match(p->dbus,
-				      "type='signal',interface='org.maemo.WireguardProvider.Running',member='Running'",
-				      NULL);
+		dbus_bus_remove_match(p->dbus, DBUS_SIGNAL, NULL);
 		dbus_connection_remove_filter(p->dbus,
 					      (DBusHandleMessageFunction)
 					      on_icd_signal, sa);
