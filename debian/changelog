@@ -1,3 +1,9 @@
+applet-wireguard (0.1.2) unstable; urgency=medium
+
+  * Fix various bugs in peer handling
+
+ -- Merlijn Wajer <merlijn@wizzup.org>  Thu, 23 Sep 2021 11:21:24 +0200
+
 applet-wireguard (0.1.1) unstable; urgency=medium
 
   * Fix segfault on status change
