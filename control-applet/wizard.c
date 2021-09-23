@@ -117,14 +117,14 @@ static void save_peer(gpointer elem, gpointer data)
 	gconf_set_string(w_data->gconf, gconf_pubkey, peer->public_key);
 	g_free(gconf_pubkey);
 
+	gconf_psk = g_strjoin("/", gconf_path, GC_PEER_PSK, NULL);
 	/* Optional key */
 	if (peer->preshared_key && strlen(peer->preshared_key) == 44) {
-		gconf_psk = g_strjoin("/", gconf_path, GC_PEER_PSK, NULL);
 		gconf_set_string(w_data->gconf, gconf_psk, peer->preshared_key);
-		g_free(gconf_psk);
 	} else {
-		gconf_client_unset(w_data-.gconf, gconf_psk, NULL);
+		gconf_client_unset(w_data->gconf, gconf_psk, NULL);
 	}
+	g_free(gconf_psk);
 
 	gconf_ips = g_strjoin("/", gconf_path, GC_PEER_ALLOWEDIPS, NULL);
 	gconf_set_string(w_data->gconf, gconf_ips, peer->allowed_ips);
