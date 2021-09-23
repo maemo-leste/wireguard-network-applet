@@ -117,10 +117,13 @@ static void save_peer(gpointer elem, gpointer data)
 	gconf_set_string(w_data->gconf, gconf_pubkey, peer->public_key);
 	g_free(gconf_pubkey);
 
-	if (strlen(peer->preshared_key) == 44) {
+	/* Optional key */
+	if (peer->preshared_key && strlen(peer->preshared_key) == 44) {
 		gconf_psk = g_strjoin("/", gconf_path, GC_PEER_PSK, NULL);
 		gconf_set_string(w_data->gconf, gconf_psk, peer->preshared_key);
 		g_free(gconf_psk);
+	} else {
+		gconf_client_unset(w_data-.gconf, gconf_psk, NULL);
 	}
 
 	gconf_ips = g_strjoin("/", gconf_path, GC_PEER_ALLOWEDIPS, NULL);
@@ -181,17 +184,24 @@ static void on_assistant_apply_wg(GtkWidget * widget, gpointer data)
 	gconf_set_string(w_data->gconf, gconf_dns, w_data->dns_address);
 	g_free(gconf_dns);
 
-	if (w_data->peers->len > 0) {
-		gconf_peers = g_strjoin("/", confname, GC_CFG_PEERS, NULL);
+	gconf_peers = g_strjoin("/", confname, GC_CFG_PEERS, NULL);
+
+	/* Nuke old peers data */
+	gconf_client_recursive_unset(w_data->gconf, gconf_peers, 0, NULL);
+	gconf_client_remove_dir(w_data->gconf, gconf_peers, NULL);
+
+	if (w_data->has_peers && w_data->peers->len > 0) {
 		gconf_client_add_dir(w_data->gconf, gconf_peers,
 				     GCONF_CLIENT_PRELOAD_NONE, NULL);
-		g_free(gconf_peers);
 
 		w_data->peer_idx = -1;
 		g_ptr_array_foreach(w_data->peers, save_peer, w_data);
 		g_ptr_array_foreach(w_data->peers, free_peer, NULL);
 	}
 	g_ptr_array_unref(w_data->peers);
+	w_data->peers = NULL;
+
+	g_free(gconf_peers);
 
 	g_free(confname);
 	g_object_unref(w_data->gconf);
@@ -649,7 +659,7 @@ static gint new_wizard_peer_page(struct wizard_data *w_data)
 	GtkWidget *pubkey_lbl, *psk_lbl, *endpoint_lbl, *ips_lbl;
 	struct wg_peer *peer = NULL;
 
-	if (w_data->peers->len > 0)
+	if (w_data->has_peers && w_data->peers->len > 0)
 		peer = w_data->peers->pdata[0];
 
 	vbox = gtk_vbox_new(TRUE, 2);
@@ -721,10 +731,10 @@ static gint new_wizard_peer_page(struct wizard_data *w_data)
 	gtk_widget_set_sensitive(w_data->p_prev_btn, FALSE);
 
 	w_data->p_next_btn = gtk_button_new_with_label("Next");
-	if (w_data->peers->len < 2)
+	if (w_data->has_peers && w_data->peers->len < 2)
 		gtk_widget_set_sensitive(w_data->p_next_btn, FALSE);
 
-	if (w_data->peers->len == 0)
+	if (w_data->peers == NULL || w_data->peers->len == 0)
 		gtk_widget_set_sensitive(w_data->p_del_btn, FALSE);
 
 	g_signal_connect(G_OBJECT(w_data->p_save_btn), "clicked",
@@ -874,6 +884,7 @@ void start_new_wizard(gpointer config_data)
 	if (config_data == NULL) {
 		w_data = g_new0(struct wizard_data, 1);
 		w_data->peers = g_ptr_array_new();
+		w_data->has_peers = FALSE;
 		w_data->peer_idx = 0;
 	} else {
 		w_data = config_data;
