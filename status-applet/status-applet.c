@@ -146,8 +146,10 @@ static void set_buttons_sensitivity(StatusAppletWireguard * obj, gboolean state)
 {
 	StatusAppletWireguardPrivate *p = GET_PRIVATE(obj);
 
-	gtk_widget_set_sensitive(p->wg_chkbtn, state);
-	gtk_widget_set_sensitive(p->config_btn, state);
+	if (p->wg_chkbtn && p->config_btn) {
+		gtk_widget_set_sensitive(p->wg_chkbtn, state);
+		gtk_widget_set_sensitive(p->config_btn, state);
+	}
 }
 
 static void status_menu_clicked_cb(GtkWidget * btn,
@@ -243,6 +245,9 @@ static void status_menu_clicked_cb(GtkWidget * btn,
 	g_object_unref(gconf);
 	gtk_widget_hide_all(p->settings_dialog);
 	gtk_widget_destroy(p->settings_dialog);
+
+	p->wg_chkbtn = NULL;
+	p->config_btn = NULL;
 }
 
 static void set_status_icon(gpointer obj, GdkPixbuf * pixbuf)
