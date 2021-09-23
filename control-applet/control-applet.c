@@ -283,6 +283,8 @@ osso_return_t execute(osso_context_t * osso, gpointer data, gboolean user_act)
 			break;
 		case CONFIG_EDIT:
 			cfgname = get_sel_in_treeview(GTK_TREE_VIEW(cfg_tree));
+			if (cfgname == NULL)
+				break;
 			w_data = fill_wizard_data_from_gconf(cfgname);
 			start_new_wizard(w_data);
 			break;
