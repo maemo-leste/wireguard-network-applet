@@ -252,7 +252,13 @@ static struct wizard_data *fill_wizard_data_from_gconf(gchar * cfgname)
 			g_slist_foreach(peerlist, append_peer, w_data);
 			g_slist_foreach(peerlist, (GFunc) g_free, NULL);
 			g_slist_free(peerlist);
+		} else {
+			w_data->has_peers = FALSE;
+			w_data->peers = g_ptr_array_new();
 		}
+	} else {
+		w_data->has_peers = FALSE;
+		w_data->peers = g_ptr_array_new();
 	}
 	g_free(g_peers);
 

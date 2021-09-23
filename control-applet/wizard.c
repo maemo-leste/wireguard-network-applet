@@ -39,7 +39,7 @@ static void free_peer(gpointer elem, gpointer data)
 	g_free(peer->allowed_ips);
 }
 
-static void on_assistant_close_cancel(GtkWidget * widget, gpointer data)
+static void on_assistant_close_cancel_wg(GtkWidget * widget, gpointer data)
 {
 	g_message("%s", G_STRFUNC);
 	(void)widget;
@@ -134,7 +134,7 @@ static void save_peer(gpointer elem, gpointer data)
 	g_free(gconf_path);
 }
 
-static void on_assistant_apply(GtkWidget * widget, gpointer data)
+static void on_assistant_apply_wg(GtkWidget * widget, gpointer data)
 {
 	(void)widget;
 	struct wizard_data *w_data = data;
@@ -894,18 +894,18 @@ void start_new_wizard(gpointer config_data)
 	g_signal_connect(G_OBJECT(w_data->assistant),
 			 "cancel",
 			 G_CALLBACK
-			 (on_assistant_close_cancel), &w_data->assistant);
+			 (on_assistant_close_cancel_wg), &w_data->assistant);
 
 	g_signal_connect(G_OBJECT(w_data->assistant),
 			 "close",
 			 G_CALLBACK
-			 (on_assistant_close_cancel), &w_data->assistant);
+			 (on_assistant_close_cancel_wg), &w_data->assistant);
 
 	g_signal_connect(G_OBJECT(w_data->assistant), "prepare",
 			 G_CALLBACK(on_assistant_prepare), w_data);
 
 	g_signal_connect(G_OBJECT(w_data->assistant),
-			 "apply", G_CALLBACK(on_assistant_apply), w_data);
+			 "apply", G_CALLBACK(on_assistant_apply_wg), w_data);
 
 	w_data->local_page = new_wizard_local_page(w_data);
 
