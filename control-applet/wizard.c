@@ -469,7 +469,8 @@ static void prev_peer_cb(GtkWidget * widget, gpointer data)
 	gtk_entry_set_text(GTK_ENTRY(w_data->p_pubkey_entry), peer->public_key);
 	gtk_entry_set_text(GTK_ENTRY(w_data->p_psk_entry), peer->preshared_key);
 	gtk_entry_set_text(GTK_ENTRY(w_data->p_endpoint_entry), peer->endpoint);
-	gtk_entry_set_text(GTK_ENTRY(w_data->p_ips_entry), peer->allowed_ips);
+	if (peer->allowed_ips != NULL)
+		gtk_entry_set_text(GTK_ENTRY(w_data->p_ips_entry), peer->allowed_ips);
 
 	gtk_widget_set_sensitive(w_data->p_del_btn, TRUE);
 }
