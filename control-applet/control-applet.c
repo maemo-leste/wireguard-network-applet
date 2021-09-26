@@ -30,6 +30,7 @@
 
 enum {
 	CONFIG_NEW,
+	CONFIG_LOAD,
 	CONFIG_EDIT,
 	CONFIG_DELETE,
 	CONFIG_DONE,
@@ -81,6 +82,7 @@ static GtkWidget *new_main_dialog(GtkWindow * parent)
 	dialog =
 	    gtk_dialog_new_with_buttons("Wireguard Configurations", parent, 0,
 					"New", CONFIG_NEW,
+					"Load", CONFIG_LOAD,
 					"Edit", CONFIG_EDIT,
 					"Delete", CONFIG_DELETE,
 					"Done", CONFIG_DONE, NULL);
@@ -268,6 +270,49 @@ static struct wizard_data *fill_wizard_data_from_gconf(gchar * cfgname)
 	return w_data;
 }
 
+static gchar *load_from_filesystem(GtkWidget *parent)
+{
+	GtkWidget *c;
+	gchar *ret;
+
+	c = gtk_file_chooser_dialog_new("Select configuration",
+		GTK_WINDOW(parent), GTK_FILE_CHOOSER_ACTION_OPEN, "Select", 0, NULL);
+	gtk_file_chooser_set_local_only(GTK_FILE_CHOOSER(c), TRUE);
+
+	switch (gtk_dialog_run(GTK_DIALOG(c))) {
+	case 0:
+		ret = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(c));
+		break;
+	default:
+		ret = NULL;
+		break;
+	}
+
+	/* TODO: Validate the configuration somehow */
+
+	gtk_widget_hide(c);
+	gtk_widget_destroy(c);
+	return ret;
+}
+
+static void save_loaded_config_to_gconf(const gchar *config_name)
+{
+	GConfClient *gconf = gconf_client_get_default();
+	gchar *bn, *gc_path, *gc_cfg;
+
+	bn = g_path_get_basename(config_name);
+	gc_path = g_strjoin("/", GC_WIREGUARD, bn, NULL);
+	gc_cfg = g_strjoin("/", gc_path, "config_file_override", NULL);
+
+	gconf_client_add_dir(gconf, gc_path, GCONF_CLIENT_PRELOAD_NONE, NULL);
+	gconf_client_set_string(gconf, gc_cfg, config_name, NULL);
+
+	g_free(bn);
+	g_free(gc_cfg);
+	g_free(gc_path);
+	g_object_unref(gconf);
+}
+
 osso_return_t execute(osso_context_t * osso, gpointer data, gboolean user_act)
 {
 	(void)osso;
@@ -287,11 +332,20 @@ osso_return_t execute(osso_context_t * osso, gpointer data, gboolean user_act)
 			gtk_widget_hide(maindialog);
 			start_new_wizard(NULL);
 			break;
+		case CONFIG_LOAD:
+			gtk_widget_hide(maindialog);
+			gchar *selected = load_from_filesystem(maindialog);
+			if (selected != NULL) {
+				save_loaded_config_to_gconf(selected);
+				g_free(selected);
+			}
+			break;
 		case CONFIG_EDIT:
 			cfgname = get_sel_in_treeview(GTK_TREE_VIEW(cfg_tree));
 			if (cfgname == NULL)
 				break;
 			w_data = fill_wizard_data_from_gconf(cfgname);
+			gtk_widget_hide(maindialog);
 			start_new_wizard(w_data);
 			break;
 		case CONFIG_DELETE:
