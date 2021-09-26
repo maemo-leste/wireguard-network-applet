@@ -181,7 +181,10 @@ static void on_assistant_apply_wg(GtkWidget * widget, gpointer data)
 	    gtk_entry_get_text(GTK_ENTRY(w_data->dnsaddr_entry));
 
 	gconf_dns = g_strjoin("/", confname, GC_CFG_DNS, NULL);
-	gconf_set_string(w_data->gconf, gconf_dns, w_data->dns_address);
+	if (g_strcmp0(w_data->dns_address, "") && g_strcmp0(w_data->dns_address, "(optional)"))
+		gconf_set_string(w_data->gconf, gconf_dns, w_data->dns_address);
+	else
+		gconf_client_unset(w_data->gconf, gconf_dns, NULL);
 	g_free(gconf_dns);
 
 	gconf_peers = g_strjoin("/", confname, GC_CFG_PEERS, NULL);
@@ -267,11 +270,13 @@ static void validate_interface_cb(GtkWidget * widget, gpointer data)
 	page_number = gtk_assistant_get_current_page(assistant);
 	cur_page = gtk_assistant_get_nth_page(assistant, page_number);
 
-	/* Validate the DNS address */
+	/* Validate the optional DNS address */
 	dns_addr = gtk_entry_get_text(GTK_ENTRY(w_data->dnsaddr_entry));
-	if (!g_hostname_is_ip_address(dns_addr)) {
-		g_warning("DNS Address is invalid");
-		goto invalid;
+	if (g_strcmp0(dns_addr, "") && g_strcmp0(dns_addr, "(optional)")) {
+		if (!g_hostname_is_ip_address(dns_addr)) {
+			g_warning("DNS Address is invalid");
+			goto invalid;
+		}
 	}
 
 	/* 
@@ -416,6 +421,9 @@ static gint new_wizard_local_page(struct wizard_data *w_data)
 	if (w_data->dns_address)
 		gtk_entry_set_text(GTK_ENTRY(w_data->dnsaddr_entry),
 				   w_data->dns_address);
+	else
+		gtk_entry_set_text(GTK_ENTRY(w_data->dnsaddr_entry),
+				   "(optional)");
 
 	gtk_box_pack_start(GTK_BOX(hb3), dnsaddr_lbl, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(hb3), w_data->dnsaddr_entry, TRUE, TRUE, 0);
