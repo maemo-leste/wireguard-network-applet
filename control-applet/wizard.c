@@ -126,9 +126,12 @@ static void save_peer(gpointer elem, gpointer data)
 	}
 	g_free(gconf_psk);
 
-	gconf_ips = g_strjoin("/", gconf_path, GC_PEER_ALLOWEDIPS, NULL);
-	gconf_set_string(w_data->gconf, gconf_ips, peer->allowed_ips);
-	g_free(gconf_ips);
+	/* TODO: Check if this can be missing from the config */
+	if (peer->allowed_ips != NULL) {
+		gconf_ips = g_strjoin("/", gconf_path, GC_PEER_ALLOWEDIPS, NULL);
+		gconf_set_string(w_data->gconf, gconf_ips, peer->allowed_ips);
+		g_free(gconf_ips);
+	}
 
 	gconf_endpoint = g_strjoin("/", gconf_path, GC_PEER_ENDPOINT, NULL);
 	gconf_set_string(w_data->gconf, gconf_endpoint, peer->endpoint);
@@ -523,8 +526,8 @@ static void validate_peer_cb(GtkWidget * widget, gpointer data)
 	struct wizard_data *w_data = data;
 	struct wg_peer *peer;
 	const gchar *pubkey, *psk, *fendpoint, *fips;
-	gchar **endpoint, **ips;
-	gint64 port, subnet;
+	gchar **endpoint;
+	gint64 port;
 	GtkAssistant *assistant = GTK_ASSISTANT(w_data->assistant);
 	gint page_number;
 	GtkWidget *cur_page;
@@ -565,7 +568,8 @@ static void validate_peer_cb(GtkWidget * widget, gpointer data)
 
 	if (!g_strcmp0(pubkey, "")
 	    && (!g_strcmp0(psk, "(optional)") || !g_strcmp0(psk, ""))
-	    && !g_strcmp0(fendpoint, "") && !g_strcmp0(fips, "")) {
+	    && !g_strcmp0(fendpoint, "")) {
+	    //&& !g_strcmp0(fendpoint, "") && !g_strcmp0(fips, "")) {
 		gtk_assistant_set_page_complete(assistant, cur_page, TRUE);
 		return;
 	}
@@ -606,7 +610,8 @@ static void validate_peer_cb(GtkWidget * widget, gpointer data)
 	}
 
 	/* TODO: Support multiple, i.e.: 0.0.0.0/0, ::/0 */
-	ips = g_strsplit(fips, "/", 2);
+	/*
+	gchar **ips = g_strsplit(fips, "/", 2);
 	if (g_strv_length(ips) != 2) {
 		hildon_banner_show_information(NULL, NULL,
 					       "Allowed IP is invalid");
@@ -621,7 +626,7 @@ static void validate_peer_cb(GtkWidget * widget, gpointer data)
 		goto invalid;
 	}
 
-	subnet = g_ascii_strtoll(ips[1], NULL, 10);
+	gint64 subnet = g_ascii_strtoll(ips[1], NULL, 10);
 
 	if (subnet != 0) {
 		if (subnet < 16 || subnet > 30) {
@@ -631,6 +636,7 @@ static void validate_peer_cb(GtkWidget * widget, gpointer data)
 			goto invalid;
 		}
 	}
+	*/
 
 	/* At this point, we consider the entries valid */
 	peer = NULL;
@@ -638,7 +644,10 @@ static void validate_peer_cb(GtkWidget * widget, gpointer data)
 	peer->public_key = g_strdup(pubkey);
 	peer->preshared_key = g_strdup(psk);
 	peer->endpoint = g_strdup(fendpoint);
-	peer->allowed_ips = g_strdup(fips);
+	if (strlen(fips) > 0)
+		peer->allowed_ips = g_strdup(fips);
+	else
+		peer->allowed_ips = NULL;
 
 	if (w_data->peer_idx >= w_data->peers->len) {
 		g_ptr_array_add(w_data->peers, peer);
