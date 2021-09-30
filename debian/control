@@ -1,4 +1,4 @@
-Source: applet-wireguard
+Source: wireguard-network-applet
 Section: libs
 Priority: optional
 Maintainer: Ivan J. <parazyd@dyne.org>
