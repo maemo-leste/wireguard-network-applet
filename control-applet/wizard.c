@@ -25,7 +25,7 @@
 #include <hildon/hildon.h>
 #include <hildon-cp-plugin/hildon-cp-plugin-interface.h>
 
-#include "configuration.h"
+#include <icd/wireguard/libicd_wireguard_shared.h>
 #include "pipeutil.h"
 #include "wizard.h"
 
@@ -105,7 +105,7 @@ static void save_peer(gpointer elem, gpointer data)
 	peer_name = g_strdup_printf("peer%d", w_data->peer_idx);
 
 	gconf_path =
-	    g_strjoin("/", GC_WIREGUARD, w_data->config_name, GC_CFG_PEERS,
+	    g_strjoin("/", GC_WIREGUARD, w_data->config_name, GC_PEERS,
 		      peer_name, NULL);
 
 	g_free(peer_name);
@@ -113,7 +113,7 @@ static void save_peer(gpointer elem, gpointer data)
 	gconf_client_add_dir(w_data->gconf, gconf_path,
 			     GCONF_CLIENT_PRELOAD_NONE, NULL);
 
-	gconf_pubkey = g_strjoin("/", gconf_path, GC_PEER_PUBLICKEY, NULL);
+	gconf_pubkey = g_strjoin("/", gconf_path, GC_PEER_PUBKEY, NULL);
 	gconf_set_string(w_data->gconf, gconf_pubkey, peer->public_key);
 	g_free(gconf_pubkey);
 
@@ -128,7 +128,7 @@ static void save_peer(gpointer elem, gpointer data)
 
 	/* TODO: Check if this can be missing from the config */
 	if (peer->allowed_ips != NULL) {
-		gconf_ips = g_strjoin("/", gconf_path, GC_PEER_ALLOWEDIPS, NULL);
+		gconf_ips = g_strjoin("/", gconf_path, GC_PEER_IPS, NULL);
 		gconf_set_string(w_data->gconf, gconf_ips, peer->allowed_ips);
 		g_free(gconf_ips);
 	}
@@ -163,7 +163,7 @@ static void on_assistant_apply_wg(GtkWidget * widget, gpointer data)
 	g_object_get(G_OBJECT(w_data->transproxy_chk), "active",
 		     &w_data->transproxy_enabled, NULL);
 
-	gconf_tpbool = g_strjoin("/", confname, GC_CFG_TUNNELENABLED, NULL);
+	gconf_tpbool = g_strjoin("/", confname, GC_SYSTUNNEL, NULL);
 	gconf_set_bool(w_data->gconf, gconf_tpbool, w_data->transproxy_enabled);
 	g_free(gconf_tpbool);
 
@@ -190,7 +190,7 @@ static void on_assistant_apply_wg(GtkWidget * widget, gpointer data)
 		gconf_client_unset(w_data->gconf, gconf_dns, NULL);
 	g_free(gconf_dns);
 
-	gconf_peers = g_strjoin("/", confname, GC_CFG_PEERS, NULL);
+	gconf_peers = g_strjoin("/", confname, GC_PEERS, NULL);
 
 	/* Nuke old peers data */
 	gconf_client_recursive_unset(w_data->gconf, gconf_peers, 0, NULL);

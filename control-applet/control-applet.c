@@ -25,7 +25,8 @@
 #include <hildon/hildon.h>
 #include <hildon-cp-plugin/hildon-cp-plugin-interface.h>
 
-#include "configuration.h"
+#include <icd/wireguard/libicd_wireguard_shared.h>
+
 #include "wizard.h"
 
 enum {
@@ -174,13 +175,13 @@ static void append_peer(gpointer elem, gpointer data)
 
 /*
 	gchar *path =
-	    g_strjoin("/", GC_WIREGUARD, w_data->config_name, GC_CFG_PEERS,
+	    g_strjoin("/", GC_WIREGUARD, w_data->config_name, GC_PEERS,
 		      peername, NULL);
 		      */
 
 	peer = g_new0(struct wg_peer, 1);
 
-	gc_pubkey = g_strjoin("/", peername, GC_PEER_PUBLICKEY, NULL);
+	gc_pubkey = g_strjoin("/", peername, GC_PEER_PUBKEY, NULL);
 	pubkey = gconf_client_get_string(w_data->gconf, gc_pubkey, NULL);
 	g_free(gc_pubkey);
 	peer->public_key = g_strdup(pubkey);
@@ -198,7 +199,7 @@ static void append_peer(gpointer elem, gpointer data)
 	g_free(gc_endpoint);
 	peer->endpoint = g_strdup(endpoint);
 
-	gc_ips = g_strjoin("/", peername, GC_PEER_ALLOWEDIPS, NULL);
+	gc_ips = g_strjoin("/", peername, GC_PEER_IPS, NULL);
 	ips = gconf_client_get_string(w_data->gconf, gc_ips, NULL);
 	g_free(gc_ips);
 	peer->allowed_ips = g_strdup(ips);
@@ -222,7 +223,7 @@ static struct wizard_data *fill_wizard_data_from_gconf(gchar * cfgname)
 	w_data->gconf = gconf_client_get_default();
 
 	config_path = g_strjoin("/", GC_WIREGUARD, cfgname, NULL);
-	g_transproxy = g_strjoin("/", config_path, GC_CFG_TUNNELENABLED, NULL);
+	g_transproxy = g_strjoin("/", config_path, GC_SYSTUNNEL, NULL);
 	g_privkey = g_strjoin("/", config_path, GC_CFG_PRIVATEKEY, NULL);
 	g_addr = g_strjoin("/", config_path, GC_CFG_ADDRESS, NULL);
 	g_dns = g_strjoin("/", config_path, GC_CFG_DNS, NULL);
@@ -244,7 +245,7 @@ static struct wizard_data *fill_wizard_data_from_gconf(gchar * cfgname)
 	    gconf_client_get_string(w_data->gconf, g_dns, NULL);
 	g_free(g_dns);
 
-	g_peers = g_strjoin("/", config_path, GC_CFG_PEERS, NULL);
+	g_peers = g_strjoin("/", config_path, GC_PEERS, NULL);
 	if (gconf_client_dir_exists(w_data->gconf, g_peers, NULL)) {
 		GSList *peerlist =
 		    gconf_client_all_dirs(w_data->gconf, g_peers, NULL);
@@ -302,7 +303,7 @@ static void save_loaded_config_to_gconf(const gchar *config_name)
 
 	bn = g_path_get_basename(config_name);
 	gc_path = g_strjoin("/", GC_WIREGUARD, bn, NULL);
-	gc_cfg = g_strjoin("/", gc_path, "config_file_override", NULL);
+	gc_cfg = g_strjoin("/", gc_path, GC_CONFIG_FILE_OVERRIDE, NULL);
 
 	gconf_client_add_dir(gconf, gc_path, GCONF_CLIENT_PRELOAD_NONE, NULL);
 	gconf_client_set_string(gconf, gc_cfg, config_name, NULL);
