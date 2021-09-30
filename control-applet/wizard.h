@@ -40,9 +40,6 @@ struct wizard_data {
 	const gchar *config_name;
 	GtkWidget *name_entry;
 
-	GtkWidget *transproxy_chk;
-	gboolean transproxy_enabled;
-
 	gint local_page;
 	gint peers_page;
 

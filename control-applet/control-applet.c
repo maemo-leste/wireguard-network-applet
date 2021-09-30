@@ -213,7 +213,7 @@ static struct wizard_data *fill_wizard_data_from_gconf(gchar * cfgname)
 {
 	struct wizard_data *w_data;
 	gchar *config_path;
-	gchar *g_transproxy, *g_privkey, *g_addr, *g_dns, *g_peers;
+	gchar *g_privkey, *g_addr, *g_dns, *g_peers;
 
 	if (cfgname == NULL)
 		return NULL;
@@ -223,16 +223,11 @@ static struct wizard_data *fill_wizard_data_from_gconf(gchar * cfgname)
 	w_data->gconf = gconf_client_get_default();
 
 	config_path = g_strjoin("/", GC_WIREGUARD, cfgname, NULL);
-	g_transproxy = g_strjoin("/", config_path, GC_SYSTUNNEL, NULL);
 	g_privkey = g_strjoin("/", config_path, GC_CFG_PRIVATEKEY, NULL);
 	g_addr = g_strjoin("/", config_path, GC_CFG_ADDRESS, NULL);
 	g_dns = g_strjoin("/", config_path, GC_CFG_DNS, NULL);
 
 	w_data->config_name = cfgname;
-
-	w_data->transproxy_enabled =
-	    gconf_client_get_bool(w_data->gconf, g_transproxy, NULL);
-	g_free(g_transproxy);
 
 	w_data->private_key =
 	    gconf_client_get_string(w_data->gconf, g_privkey, NULL);

@@ -84,6 +84,7 @@ static void gconf_set_string(GConfClient * gconf, const gchar * key,
 	gconf_value_free(v);
 }
 
+/*
 static void gconf_set_bool(GConfClient * gconf, const gchar * key, gboolean x)
 {
 	GConfValue *v;
@@ -93,6 +94,7 @@ static void gconf_set_bool(GConfClient * gconf, const gchar * key, gboolean x)
 	gconf_client_set(gconf, key, v, NULL);
 	gconf_value_free(v);
 }
+*/
 
 static void save_peer(gpointer elem, gpointer data)
 {
@@ -150,8 +152,7 @@ static void on_assistant_apply_wg(GtkWidget * widget, gpointer data)
 		return;
 
 	w_data->gconf = gconf_client_get_default();
-	gchar *gconf_tpbool, *gconf_privkey, *gconf_addr, *gconf_dns,
-	    *gconf_peers;
+	gchar *gconf_privkey, *gconf_addr, *gconf_dns, *gconf_peers;
 
 	w_data->config_name = gtk_entry_get_text(GTK_ENTRY(w_data->name_entry));
 	gchar *confname =
@@ -159,13 +160,6 @@ static void on_assistant_apply_wg(GtkWidget * widget, gpointer data)
 
 	gconf_client_add_dir(w_data->gconf, confname, GCONF_CLIENT_PRELOAD_NONE,
 			     NULL);
-
-	g_object_get(G_OBJECT(w_data->transproxy_chk), "active",
-		     &w_data->transproxy_enabled, NULL);
-
-	gconf_tpbool = g_strjoin("/", confname, GC_SYSTUNNEL, NULL);
-	gconf_set_bool(w_data->gconf, gconf_tpbool, w_data->transproxy_enabled);
-	g_free(gconf_tpbool);
 
 	w_data->private_key =
 	    gtk_entry_get_text(GTK_ENTRY(w_data->privkey_entry));
@@ -857,12 +851,6 @@ static void new_wizard_main_page(struct wizard_data *w_data)
 	g_signal_connect(G_OBJECT(w_data->name_entry), "changed",
 			 G_CALLBACK(on_conf_name_entry_changed), w_data);
 
-	w_data->transproxy_chk =
-	    gtk_check_button_new_with_label("Enable system-wide tunneling");
-	if (w_data->transproxy_enabled)
-		g_object_set(G_OBJECT(w_data->transproxy_chk), "active", TRUE,
-			     NULL);
-
 	w_data->peers_chk = gtk_check_button_new_with_label("Add peers");
 	if (w_data->has_peers)
 		g_object_set(G_OBJECT(w_data->peers_chk), "active", TRUE, NULL);
@@ -876,8 +864,6 @@ static void new_wizard_main_page(struct wizard_data *w_data)
 
 	gtk_box_pack_start(GTK_BOX(vbox), info, TRUE, TRUE, 0);
 	gtk_box_pack_start(GTK_BOX(vbox), box, FALSE, FALSE, 0);
-	gtk_box_pack_start(GTK_BOX(vbox), w_data->transproxy_chk, FALSE, FALSE,
-			   0);
 	gtk_box_pack_start(GTK_BOX(vbox), w_data->peers_chk, FALSE, FALSE, 0);
 
 	gtk_widget_show_all(vbox);
