@@ -8,6 +8,7 @@ control_applet_wireguard_la_SOURCES = \
 
 control_applet_wireguard_la_CFLAGS = \
 	$(libhildon_CFLAGS) \
+	$(libhildonfm_CFLAGS) \
 	$(hildoncontrolpanel_CFLAGS) \
 	$(gtk2_CFLAGS) \
 	$(glib2_CFLAGS) \
@@ -17,6 +18,8 @@ control_applet_wireguard_la_CFLAGS = \
 
 control_applet_wireguard_la_LIBADD = \
 	$(libhildon_LIBS) \
+	$(libhildonfm_LIBS) \
+	$(hildoncontrolpanel_CFLAGS) \
 	$(hildoncontrolpanel_LIBS) \
 	$(gtk2_LIBS) \
 	$(glib2_LIBS) \
