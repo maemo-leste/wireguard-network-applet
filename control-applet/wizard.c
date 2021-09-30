@@ -394,7 +394,7 @@ static gint new_wizard_local_page(struct wizard_data *w_data)
 
 	pubkey_lbl = gtk_label_new("Public key:");
 	w_data->pubkey_entry = gtk_entry_new();
-	gtk_widget_set_sensitive(w_data->pubkey_entry, FALSE);
+	g_object_set(G_OBJECT(w_data->pubkey_entry), "editable", FALSE, NULL);
 
 	gtk_box_pack_start(GTK_BOX(hb1), pubkey_lbl, FALSE, FALSE, 0);
 	gtk_box_pack_start(GTK_BOX(hb1), w_data->pubkey_entry, TRUE, TRUE, 0);
