@@ -1,3 +1,12 @@
+applet-wireguard (0.1.3) unstable; urgency=medium
+
+  * Make DNS optional
+  * Skip AllowedIPs validation for now
+  * Support loading existing config files
+  * Allow copying pubkey from UI
+
+ -- Merlijn Wajer <merlijn@wizzup.org>  Thu, 30 Sep 2021 14:46:45 +0200
+
 applet-wireguard (0.1.2) unstable; urgency=medium
 
   * Fix various bugs in peer handling

@@ -210,10 +210,14 @@ static void status_menu_clicked_cb(GtkWidget * btn,
 						  g_path_get_basename
 						  (iter->data));
 
+        if (p->active_config == NULL) {
+            status_debug("status_menu_clicked_cb: p->active_config == NULL");
+        } else {
 		if (!strcmp(g_path_get_basename(iter->data), p->active_config))
 			hildon_touch_selector_set_active(HILDON_TOUCH_SELECTOR
 							 (p->touch_selector), 0,
 							 i);
+        }
 
 		g_free(iter->data);
 	}
