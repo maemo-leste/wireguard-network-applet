@@ -25,7 +25,7 @@
 #include <hildon/hildon.h>
 #include <hildon/hildon-fm.h>
 #include <hildon-cp-plugin/hildon-cp-plugin-interface.h>
-
+#include <connui/connui-log.h>
 #include <icd/wireguard/libicd_wireguard_shared.h>
 
 #include "wizard.h"
@@ -70,6 +70,35 @@ static void fill_treeview_from_gconf(GtkWidget * tv)
 		g_free(iter->data);
 	}
 
+	g_slist_free(iter);
+	g_slist_free(configs);
+}
+
+static void update_available_ids(void)
+{
+	GConfClient *gconf;
+	GSList *configs, *iter;
+	GError *error = NULL;
+
+	gconf = gconf_client_get_default();
+	configs = gconf_client_all_dirs(gconf, GC_WIREGUARD, NULL);
+
+	for (iter = configs; iter; iter = iter->next) {
+		char *basename = g_path_get_basename(iter->data);
+		g_free(iter->data);
+		iter->data = basename;
+	}
+
+	gconf_client_set_list(gconf, GC_ICD_WIREGUARD_AVAILABLE_IDS,
+			      GCONF_VALUE_STRING, configs, &error);
+
+	if (error) {
+		ULOG_WARN("Unable to write %s: %s", GC_ICD_WIREGUARD_AVAILABLE_IDS,
+			  error->message);
+		g_error_free(error);
+	}
+
+	g_object_unref(gconf);
 	g_slist_free(iter);
 	g_slist_free(configs);
 }
@@ -355,6 +384,8 @@ osso_return_t execute(osso_context_t * osso, gpointer data, gboolean user_act)
 
 		gtk_widget_destroy(maindialog);
 	} while (!config_done);
+
+	update_available_ids();
 
 	return OSSO_OK;
 }
