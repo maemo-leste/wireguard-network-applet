@@ -13,6 +13,7 @@ Build-Depends:
  libosso-dev,
  libgconf2-dev,
  libdbus-1-dev,
+ libconnui-dev,
  libicd-wireguard-dev,
 Standards-Version: 4.3.0
 
