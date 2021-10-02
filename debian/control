@@ -4,6 +4,7 @@ Priority: optional
 Maintainer: Ivan J. <parazyd@dyne.org>
 Build-Depends:
  debhelper-compat (= 12),
+ maemo-system-services-dev,
  libhildon1-dev,
  libhildonfm2-dev,
  libhildondesktop1-dev,
@@ -26,3 +27,18 @@ Package: control-panel-wireguard
 Architecture: any
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Description: Wireguard control panel applet
+
+Package: wireguard-maemo
+Section: user/network
+Architecture: all
+Depends:
+ ${misc:Depends},
+ status-area-wireguard,
+ control-panel-wireguard,
+ libicd-network-wireguard,
+ libicd-provider-wireguard,
+Description: Wireguard connectivity package.
+ This package serves as a metapackage to install ICD2 plugins and
+ providers for Wireguard, and the accompanying graphical user
+ interfaces.
+XB-Maemo-Icon-26: ${maemo:icon26}
