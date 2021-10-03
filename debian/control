@@ -28,7 +28,8 @@ Architecture: any
 Depends: ${misc:Depends}, ${shlibs:Depends}
 Description: Wireguard control panel applet
 
-Package: Wireguard support for Maemo
+Package: wireguard-maemo
+XB-Maemo-Display-Name: Wireguard support for Maemo
 Section: user/network
 Architecture: all
 Depends:
